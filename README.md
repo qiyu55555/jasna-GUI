@@ -1,3 +1,7 @@
+
+<img width="2047" height="1555" alt="屏幕截图 2026-02-03 011244" src="https://github.com/user-attachments/assets/36407de6-a86a-4480-b41c-0fb60305beac" />
+
+
 适配https://github.com/Kruk2/jasna这个程序
 
 理论上只要jasna的执行命令没有发生变化，此软件就适用于所有的jasna版本
