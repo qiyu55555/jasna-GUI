@@ -1,6 +1,6 @@
 适配https://github.com/Kruk2/jasna这个程序
 
-理论上只要jasna的执行命令没有发生变化，此软件就使用所有的jasna版本
+理论上只要jasna的执行命令没有发生变化，此软件就适用于所有的jasna版本
 
 已实现功能：
 
