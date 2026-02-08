@@ -5,7 +5,8 @@
 jasna-GUI 是一个为 [JASNA](https://github.com/Kruk2/jasna) 视频处理工具开发的图形用户界面（中文版），旨在简化 JASNA 的使用流程，提供更直观、更友好的操作体验。
 
 JASNA 是一个强大的视频处理工具，主要用于视频去马赛克等高级视频处理任务。本GUI程序可以不与jasna.exe程序放在一起，放在任何位置都可以正常运行，只要jasna.exe的命令没有改变，则此程序可以适用于jasna的不同版本。
-<img width="2048" height="1549" alt="屏幕截图 2026-02-09 022036" src="https://github.com/user-attachments/assets/3d3c7121-76cd-4b8a-96a7-18ffce73856d" />
+<img width="2045" height="1549" alt="屏幕截图 2026-02-09 022422" src="https://github.com/user-attachments/assets/6150a104-76af-4290-9a6a-0aaf5e2e0cda" />
+
 
 
 ## 功能特点
