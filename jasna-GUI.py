@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v4.0-rc3  （ 作者：旗鱼 ）                                          jasna和lada均为免费开源软件     中文交流QQ群：767031656")
+        self.root.title("JASNA视频处理工具-v5.0  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
         self.root.geometry("1170x1040")  # 窗口高度为1045，以适应状态栏下移5像素
         
         # 设置窗口图标
@@ -776,14 +776,54 @@ class JasnaGUI:
         self.encode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.encode_params_var, width=53, font=self.normal_font)
         self.encode_params_entry.place(x=140, y=120, width=980)
         
-        # 14. 视频转码参数
+        # 14. 卡死后转码参数
         transcode_label = ttk.Label(self.settings_frame, text="卡死后转码参数", font=self.normal_font)
         transcode_label.place(x=10, y=160)
         Tooltip(transcode_label, "视频转码参数，用于处理出错视频的转码参数\n\n此参数决定转码后的视频质量和文件体积\n不影响最终的成品视频体积\n只决定转码后视频与原视频的质量接近程度\n所以qp的值越低越好（值越低代表质量越高）\n建议14-16\n\n默认参数: -preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k\n\n默认使用英伟达自带的硬件编码器和解码器\n\n-preset p5：使用p5预设\n-tune hq：使用hq调优\n-rc constqp：使用常量qp模式\n-qp 15：设置qp值为15\n-c:a aac：使用aac编码器\n-b:a 256k：设置音频码率为256k\n\n音频会首先使用复制模式\n复制失败后才会使用你设置的音频编码参数")
         
         self.transcode_params_var = tk.StringVar(value='-preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k')
         self.transcode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.transcode_params_var, width=53, font=self.normal_font)
-        self.transcode_params_entry.place(x=140, y=160, width=980)
+        self.transcode_params_entry.place(x=140, y=160, width=680)
+        
+        # 检测模型选择
+        detection_model_label = ttk.Label(self.settings_frame, text="检测模型", font=self.normal_font)
+        detection_model_label.place(x=860, y=160, width=80, height=30)
+        Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: rfdetr-v3\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v3: 最新版本的RFDetr模型，也就是jasna-v3检测模型\nlada-yolo-v4: 最新版本的Lada-YOLO模型，也就是lada-v4f模型\nrfdetr-v2: 旧版本的RFDetr模型，也就是jasna-v2检测模型\nlada-yolo-v2: 旧版本的Lada-YOLO模型，也就是lada-v2模型''')
+        
+        # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
+        detection_model_options = ["rfdetr-v3", "lada-yolo-v4", "rfdetr-v2", "lada-yolo-v2"]
+        self.detection_model_current_option_index = 0  # 当前选项索引
+        
+        # 确保detection_model_var被正确初始化
+        if not hasattr(self, 'detection_model_var') or self.detection_model_var is None:
+            self.detection_model_var = tk.StringVar()
+        
+        # 创建一个带有内凹效果的自定义按钮
+        self.detection_model_button = tk.Button(
+            self.settings_frame, 
+            textvariable=self.detection_model_var,
+            command=self.show_detection_model_menu,
+            font=self.normal_font,
+            bg="white",  # 白色背景
+            fg="black",
+            relief="sunken",  # 内凹效果
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.detection_model_button.place(x=940, y=160, width=180, height=30)
+        
+        # 初始化显示，默认使用rfdetr-v3
+        self.detection_model_var.set(detection_model_options[0])
+        self.detection_model_options_list = detection_model_options
+        
+        # 创建右键菜单
+        self.detection_model_menu = tk.Menu(self.root, tearoff=0)
+        for option in detection_model_options:
+            # 使用嵌套函数解决lambda捕获变量的问题
+            def make_command(opt):
+                return lambda: self.select_detection_model_option(opt)
+            self.detection_model_menu.add_command(label=option, command=make_command(option))
         
         # 二次修复模块 - 插入到自定义设置模块下方
         self.secondary_fix_frame = ttk.LabelFrame(self.root, text="二次修复", padding="10")
@@ -952,7 +992,7 @@ class JasnaGUI:
         
         # 二次修复显示/隐藏选项
         secondary_fix_label = ttk.Label(self.button_frame, text="二次修复", font=self.normal_font)
-        secondary_fix_label.place(x=110, y=12, width=100, height=30)
+        secondary_fix_label.place(x=100, y=12, width=100, height=30)
         Tooltip(secondary_fix_label, "二次修复模块控制\n\n用于控制是否显示二次修复模块，该模块包含TVAI和Swin2SR两种修复选项。\n\n默认值为\"隐藏\"，需要时可设置为\"显示\"。")
         
         # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
@@ -972,7 +1012,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.secondary_fix_display_button.place(x=30, y=12, width=70, height=30)
+        self.secondary_fix_display_button.place(x=25, y=12, width=70, height=30)
         Tooltip(self.secondary_fix_display_button, "选择二次修复模块的显示状态\n\n显示：显示完整的二次修复模块，包括TVAI和Swin2SR子模块\n隐藏：隐藏二次修复模块，释放界面空间\n\n默认值为\"隐藏\"。")
         
         # 初始化显示
@@ -1011,7 +1051,7 @@ class JasnaGUI:
         
         # 处理完成后操作选择
         post_processing_label = ttk.Label(self.button_frame, text="处理完成后", font=self.normal_font)
-        post_processing_label.place(x=960, y=12, width=100, height=30)
+        post_processing_label.place(x=965, y=12, width=100, height=30)
         Tooltip(post_processing_label, "选择视频处理全部完成后执行的操作\n无: 不执行任何操作\n退出并休眠: 关闭软件并使计算机休眠\n退出并关机: 关闭软件并关闭计算机")
         
         # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
@@ -1035,7 +1075,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.post_processing_button.place(x=1055, y=12, width=70, height=30)
+        self.post_processing_button.place(x=1060, y=12, width=70, height=30)
         
         # 初始化显示，确保每次启动时均初始化为默认的"无"选项
         self.post_processing_action_var.set(post_processing_options[0])
@@ -1073,7 +1113,9 @@ class JasnaGUI:
         # 绑定变量追踪，当处理模式变化时更新背景色
         self.processing_mode_var.trace_add("write", self._on_processing_mode_change)
         # 初始状态下隐藏状态指示器
-        # self.processing_mode_label.place(x=450, y=5, width=50, height=30)
+        self.processing_mode_label.place(x=450, y=5, width=50, height=30)
+        # 默认隐藏
+        self.processing_mode_label.place_forget()
         
         # 进度条
         self.progress_bar = ttk.Progressbar(left_frame, length=400, mode='determinate')
@@ -1342,6 +1384,8 @@ class JasnaGUI:
             "error_folder": self.error_folder_var.get(),
             "success_folder": self.success_folder_var.get(),  # 新增
             "slice_frames_history": getattr(self, 'slice_frames_history', []),  # 添加切片帧数历史记录
+            # 检测模型设置
+            "detection_model": self.detection_model_var.get(),  # 新增检测模型
             # 二次修复相关设置
             "secondary_fix": self.secondary_fix_var.get(),
             "ffmpeg_path": self.ffmpeg_path_var.get(),
@@ -1391,6 +1435,9 @@ class JasnaGUI:
                 
                 # 加载切片帧数历史记录
                 self.slice_frames_history = settings.get("slice_frames_history", [])
+                
+                # 加载检测模型设置
+                self.detection_model_var.set(settings.get("detection_model", "rfdetr-v3"))  # 新增检测模型，默认rfdetr-v3
                 
                 # 加载二次修复相关设置
                 self.secondary_fix_var.set(settings.get("secondary_fix", "无"))
@@ -2069,6 +2116,10 @@ class JasnaGUI:
             jasna_dir = os.path.dirname(jasna_path)
             jasna_exe_name = os.path.basename(jasna_path)
             
+            # 开始处理前，显示"破解"状态标识
+            self.processing_mode_var.set("破解")
+            self.processing_mode_label.place(x=450, y=5, width=50, height=30)
+            
             # 处理每个未处理的视频
             for item in self.video_lists["unprocessed"][:]:  # 使用副本遍历
                 # 处理新旧两种格式
@@ -2144,7 +2195,7 @@ class JasnaGUI:
                 encode_params = f'"{self.encode_params_var.get()}"'
                 
                 # 构建基础命令
-                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {self.slice_frames_var.get()} --codec hevc --encoder-settings {encode_params}'
+                cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {self.slice_frames_var.get()} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
                 
                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                 secondary_fix_option = self.secondary_fix_var.get()
@@ -2437,6 +2488,10 @@ class JasnaGUI:
                     input_folder = self.input_folder_var.get()
                     
                     if error_folder and os.path.exists(error_folder) and input_folder and os.path.exists(input_folder):
+                        # 开始转码前，显示"转码"状态标识
+                        self.processing_mode_var.set("转码")
+                        self.processing_mode_label.place(x=450, y=5, width=50, height=30)
+                        
                         self.logger.info("开始对错误视频进行转码...")
                         self.root.after(0, lambda: self.status_var.set("正在对错误视频进行转码..."))
                         
@@ -2564,7 +2619,7 @@ class JasnaGUI:
                         encode_params = f'"{self.encode_params_var.get()}"'
                         
                         # 构建基础命令
-                        cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {self.slice_frames_var.get()} --codec hevc --encoder-settings {encode_params}'
+                        cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {self.slice_frames_var.get()} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
                         
                         # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                         secondary_fix_option = self.secondary_fix_var.get()
@@ -2857,9 +2912,11 @@ class JasnaGUI:
                 self.root.after(0, lambda: self.status_var.set("处理已停止"))
                 self.logger.info("处理已停止")
             
-            # 处理完成后强制终止所有jasna.exe进程
-            self.logger.info("处理完成，强制终止所有jasna.exe进程")
-            self.kill_all_jasna_processes()
+            # 只有在不是用户停止的情况下，才强制终止所有jasna.exe进程
+            if not self.stop_processing:
+                # 处理完成后强制终止所有jasna.exe进程
+                self.logger.info("处理完成，强制终止所有jasna.exe进程")
+                self.kill_all_jasna_processes()
             
             # 在所有处理完成后清空日志文件
             self.clear_log_file()
@@ -2984,26 +3041,40 @@ class JasnaGUI:
         except Exception as e:
             self.logger.error(f"处理卡死视频时出错: {str(e)}")
     
-    def kill_all_jasna_processes(self):
-        """强制终止所有名为jasna.exe的进程"""
+    def get_jasna_exe_name(self):
+        """从JASNA程序地址中提取程序名字"""
+        jasna_path = self.jasna_path_var.get()
+        if not jasna_path:
+            return "jasna-cli.exe"  # 默认值
+        
+        # 提取程序名字
+        import os
+        return os.path.basename(jasna_path)
+    
+    def kill_all_jasna_processes(self, jasna_exe_name=None):
+        """强制终止所有指定名称的进程"""
+        # 如果没有提供jasna_exe_name，从JASNA程序地址中提取
+        if jasna_exe_name is None:
+            jasna_exe_name = self.get_jasna_exe_name()
+        
         try:
-            self.logger.info("开始强制终止所有jasna.exe进程...")
+            self.logger.info(f"开始强制终止所有{jasna_exe_name}进程...")
             
             if sys.platform == "win32":
                 # 方法1: 使用taskkill终止进程树
-                subprocess.run("taskkill /F /T /IM jasna.exe", 
+                subprocess.run(f"taskkill /F /T /IM {jasna_exe_name}", 
                              shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                self.logger.info("已使用taskkill /F /T /IM jasna.exe命令")
+                self.logger.info(f"已使用taskkill /F /T /IM {jasna_exe_name}命令")
                 
                 
                 # 最后再检查一次，确保进程已终止
                 time.sleep(1)
-                check_result = subprocess.run("tasklist /FI \"IMAGENAME eq jasna.exe\"", 
+                check_result = subprocess.run(f"tasklist /FI \"IMAGENAME eq {jasna_exe_name}\"", 
                                             shell=True, capture_output=True, text=True)
-                if "jasna.exe" not in check_result.stdout:
-                    self.logger.info("确认所有jasna.exe进程已被终止")
+                if jasna_exe_name not in check_result.stdout:
+                    self.logger.info(f"确认所有{jasna_exe_name}进程已被终止")
                 else:
-                    self.logger.warning("仍有jasna.exe进程在运行，尝试其他方法...")
+                    self.logger.warning(f"仍有{jasna_exe_name}进程在运行，尝试其他方法...")
                     
                     # 尝试更暴力的方法
                     subprocess.run("taskkill /F /IM javaw.exe >nul 2>&1", shell=True)
@@ -3019,7 +3090,7 @@ class JasnaGUI:
                         self.current_process.kill()
                 
         except Exception as e:
-            self.logger.error(f"终止jasna.exe进程时出错: {str(e)}")
+            self.logger.error(f"终止{jasna_exe_name}进程时出错: {str(e)}")
     
     def stuck_monitor_callback(self, message):
         """卡死监测回调函数"""
@@ -3320,7 +3391,11 @@ class JasnaGUI:
                 line = process.stdout.readline()
                 if line:
                     # 记录输出
-                    self.progress_output_lines.append(line.strip())
+                    line_stripped = line.strip()
+                    self.progress_output_lines.append(line_stripped)
+                    
+                    # 将jasna-cli.exe的输出写入日志文件
+                    self.logger.info(f"jasna-cli: {line_stripped}")
                     
                     # 尝试解析进度信息
                     progress_info = self.parse_jasna_progress(line)
@@ -3328,16 +3403,16 @@ class JasnaGUI:
                         # 更新进度显示
                         self.root.after(0, lambda p=progress_info: self.update_detailed_progress(p))
                     
-                    # 记录日志
+                    # 记录日志（保持原有逻辑，用于错误和警告的特殊处理）
                     if "error" in line.lower() or "failed" in line.lower():
-                        self.logger.error(f"JASNA输出 - {video_file}: {line.strip()}")
+                        self.logger.error(f"JASNA输出 - {video_file}: {line_stripped}")
                         self.processing_error = True
                     elif "warning" in line.lower():
-                        self.logger.warning(f"JASNA输出 - {video_file}: {line.strip()}")
+                        self.logger.warning(f"JASNA输出 - {video_file}: {line_stripped}")
                     else:
-                        # 记录进度信息行
+                        # 记录进度信息行（保持原有逻辑）
                         if 'Processing video:' in line:
-                            self.logger.info(f"JASNA输出 - {video_file}: {line.strip()}")
+                            self.logger.info(f"JASNA输出 - {video_file}: {line_stripped}")
                 else:
                     # 没有输出，短暂休眠
                     time.sleep(0.1)
@@ -3729,6 +3804,18 @@ class JasnaGUI:
         """选择处理完成后操作选项"""
         self.post_processing_action_var.set(option)
     
+    def show_detection_model_menu(self, event=None):
+        """显示检测模型选项菜单"""
+        # 获取按钮的位置
+        x = self.detection_model_button.winfo_rootx()
+        y = self.detection_model_button.winfo_rooty() + self.detection_model_button.winfo_height()
+        # 显示菜单
+        self.detection_model_menu.post(x, y)
+    
+    def select_detection_model_option(self, option):
+        """选择检测模型选项"""
+        self.detection_model_var.set(option)
+    
     def show_secondary_fix_display_menu(self):
         """显示二次修复显示/隐藏选项菜单"""
         # 在按钮位置显示菜单
@@ -3859,6 +3946,9 @@ class JasnaGUI:
         """停止处理"""
         self.stop_processing = True
         self.status_var.set("正在停止处理...")
+        
+        # 无论当前处理模式，立即隐藏状态标识
+        self.processing_mode_label.place_forget()
         
         # 检查当前处理模式来决定终止哪个进程
         current_mode = self.processing_mode_var.get()
