@@ -125,8 +125,8 @@ JASNA 是一个强大的视频处理工具，主要用于视频去马赛克等�
 | 输出文件夹 | 处理后的视频文件保存位置 | - | - |
 | 成功视频存放文件夹 | 处理成功后的原视频文件存放位置 | - | - |
 | 出错视频存放文件夹 | 处理失败的原视频文件存放位置 | - | - |
-| 自定义编码参数 | 视频编码参数 | preset=P7,tuning_info=high_quality,rc=vbr,cq=31,aq=1,temporalaq=0,lookahead=32,gop=300 | - |
-| 卡死后转码参数 | 处理出错视频的转码参数 | -preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k | - |
+| 自定义编码参数 | 视频编码参数 | preset=P7,tuning_info=high_quality,rc=vbr,\ncq=31,aq=1,temporalaq=0,lookahead=32,gop=300 | - |
+| 卡死后转码参数 | 处理出错视频的转码参数 | -preset p5 -tune hq -rc constqp \n-qp 15 -c:a aac -b:a 256k | - |
 
 ### 二次修复配置
 
