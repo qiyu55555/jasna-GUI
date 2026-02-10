@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v5.0  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
+        self.root.title("JASNA视频处理工具-v5.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
         self.root.geometry("1170x1040")  # 窗口高度为1045，以适应状态栏下移5像素
         
         # 设置窗口图标
@@ -885,7 +885,7 @@ class JasnaGUI:
         # 模型名称
         model_label = ttk.Label(self.tvai_frame, text="模型名称", font=self.normal_font)
         model_label.place(x=450, y=8)
-        Tooltip(model_label, "TVAI使用的模型名称\n默认值为\"iris-2\"\n\n所有模型需要在TVAI中先下载完成\n\n所有模型名称都是基于TVAI-7.1.0制作，不确保能适用于其他版本\n\niris-2猜测为TVAI软件中的iris（低质量）\niris-3猜测为TVAI软件中的iris（中等质量）\nprob-4猜测为TVAI软件中的Proteus\nrhea-1猜测为TVAI软件中的Rhea\nrxl-1猜测为TVAI软件中的Rhea XL\nthd-3猜测为TVAI软件中Theia(Fine Tune Detail)\nthf-4猜测为TVAI软件中Theia(Fine Tune Fidelity)\nnyx-3猜测为TVAI软件中Nyx\nnxf-1猜测为TVAI软件中Nyx Fast\ngcg-5猜测为TVAI软件中Gaia(Computer Generated)\nghq-5猜测为TVAI软件中Gaia(High Quality)\nahq-12猜测为TVAI软件中Artemis(High Quality)\nalq-13猜测为TVAI软件中Artemis(Low Quality)\nalqs-2猜测为TVAI软件中Artemis(Strong Halo)\namq-13猜测为TVAI软件中Artemis(Medium Quality)\namqs-2猜测为TVAI软件中Artemis(Medium Halo)\naaa-9猜测为TVAI软件中Artemis(Aliasing or Moire)")
+        Tooltip(model_label, "TVAI使用的模型名称\n\n默认值为\"iris-2\"\n\n所有模型需要在TVAI中先下载完成\n\n所有模型名称都是基于TVAI-7.1.0制作，不确保能适用于其他版本\n\niris-2猜测为TVAI软件中的iris（低质量）\niris-3猜测为TVAI软件中的iris（中等质量）\nprob-4猜测为TVAI软件中的Proteus\nrhea-1猜测为TVAI软件中的Rhea\nrxl-1猜测为TVAI软件中的Rhea XL\nthd-3猜测为TVAI软件中Theia(Fine Tune Detail)\nthf-4猜测为TVAI软件中Theia(Fine Tune Fidelity)\nnyx-3猜测为TVAI软件中Nyx\nnxf-1猜测为TVAI软件中Nyx Fast\ngcg-5猜测为TVAI软件中Gaia(Computer Generated)\nghq-5猜测为TVAI软件中Gaia(High Quality)\nahq-12猜测为TVAI软件中Artemis(High Quality)\nalq-13猜测为TVAI软件中Artemis(Low Quality)\nalqs-2猜测为TVAI软件中Artemis(Strong Halo)\namq-13猜测为TVAI软件中Artemis(Medium Quality)\namqs-2猜测为TVAI软件中Artemis(Medium Halo)\naaa-9猜测为TVAI软件中Artemis(Aliasing or Moire)")
         
         # 模型名称选项 - 使用自定义按钮实现，避免下拉箭头
         tvai_model_options = ["iris-2", "iris-3", "prob-4", "rhea-1", "rxl-1", "thd-3", "thf-4", "nyx-3", "nxf-1", "gcg-5", "ghq-5", "ahq-12", "alq-13", "alqs-2", "amq-13", "amqs-2", "aaa-9"]
@@ -957,7 +957,7 @@ class JasnaGUI:
         # 线程数
         threads_label = ttk.Label(self.tvai_frame, text="线程数", font=self.normal_font)
         threads_label.place(x=725, y=8)
-        Tooltip(threads_label, "TVAI使用的线程数\n默认值为\"2\"\n\n同时启动几条TVAI处理线程\n线程越多，处理速度越快\n但也会增加显存占用")
+        Tooltip(threads_label, "TVAI使用的线程数\n\n默认值为\"2\"\n\n同时启动几条TVAI处理线程\n线程越多，处理速度越快\n但也会增加显存占用")
         
         self.tvai_threads_entry = ttk.Entry(self.tvai_frame, textvariable=self.tvai_threads_var, width=9, font=self.normal_font, justify='center')
         self.tvai_threads_entry.place(x=780, y=8, width=60)
@@ -1780,7 +1780,7 @@ class JasnaGUI:
                     font_obj = tkFont.Font(family=temp_font[0], size=temp_font[1])
                     
                     # 获取速度信息
-                    speed_info = f"[速度: {video['processing_speed']}X]"
+                    speed_info = f"[速度: {video['processing_speed']}]"
                     
                     # 基础组成结构为："视频名称" + "4个空格" + "处理速度"
                     base_spacing = "    "  # 4个空格
@@ -2340,10 +2340,16 @@ class JasnaGUI:
                                         video_duration_seconds = 0
                             
                             # 计算处理速度
-                            if video_duration_seconds > 0:
-                                processing_speed = processing_duration / video_duration_seconds
-                                # 保留最多三位数字
-                                processing_speed_str = self.format_to_three_digits(processing_speed)
+                            if processing_duration > 0:
+                                # 使用总帧数除以处理时间（秒）计算fps
+                                input_path = os.path.join(self.input_folder_var.get(), video_file)
+                                total_frames = self.estimate_total_frames(input_path)
+                                if total_frames > 0:
+                                    processing_speed = total_frames / processing_duration
+                                    # 只保留整数
+                                    processing_speed_str = f"{int(processing_speed)}fps"
+                                else:
+                                    processing_speed_str = "未知"
                             else:
                                 processing_speed_str = "未知"
                             
