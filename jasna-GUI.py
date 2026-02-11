@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v5.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
+        self.root.title("JASNA视频处理工具-v5.2  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
         self.root.geometry("1170x1040")  # 窗口高度为1045，以适应状态栏下移5像素
         
         # 设置窗口图标
@@ -425,6 +425,8 @@ class JasnaGUI:
         
         # 初始化切片帧数历史记录
         self.slice_frames_history = []
+        # 初始化检测模型历史记录
+        self.detection_model_history = []
         
         # 用于跟踪stuck_seconds是否被临时修改
         self.original_stuck_seconds = None
@@ -717,8 +719,8 @@ class JasnaGUI:
         self.stuck_seconds_entry.place(x=1060, y=0, width=60)
         
         # 第二行设置
-        # 5. 输入文件夹
-        input_label = ttk.Label(self.settings_frame, text="输入文件夹", font=self.normal_font)
+        # 5. 视频输入文件夹
+        input_label = ttk.Label(self.settings_frame, text="视频输入文件夹", font=self.normal_font)
         input_label.place(x=10, y=40)
         Tooltip(input_label, "包含待处理视频文件的文件夹路径\n\n例如: D:/videos/输入文件夹\n\n输入、输出、成功、出错文件夹最好不要为上下级目录或同一目录\n否则可能会导致处理失败")
         
@@ -729,8 +731,8 @@ class JasnaGUI:
         input_browse_btn = ttk.Button(self.settings_frame, text="浏览", command=self.browse_input_folder, style="TButton")
         input_browse_btn.place(x=450, y=40, width=60)
         
-        # 6. 成功视频存放文件夹
-        success_label = ttk.Label(self.settings_frame, text="成功视频存放文件夹", font=self.normal_font)
+        # 6. 成功原视频存放文件夹
+        success_label = ttk.Label(self.settings_frame, text="成功原视频存放文件夹", font=self.normal_font)
         success_label.place(x=530, y=40)
         Tooltip(success_label, "处理成功后的原视频文件（也就是有马赛克的视频）将被移动到此文件夹\n\n例如: D:/videos/成功视频文件夹\n\n输入、输出、成功、出错文件夹最好不要为上下级目录或同一目录\n否则可能会导致处理失败")
         
@@ -742,8 +744,8 @@ class JasnaGUI:
         success_browse_btn.place(x=1060, y=40, width=60)
         
         # 第三行设置
-        # 7. 输出文件夹
-        output_label = ttk.Label(self.settings_frame, text="输出文件夹", font=self.normal_font)
+        # 7. 视频输出文件夹
+        output_label = ttk.Label(self.settings_frame, text="视频输出文件夹", font=self.normal_font)
         output_label.place(x=10, y=80)
         Tooltip(output_label, "处理后的视频文件（也就是无马赛克的视频）将保存到此文件夹\n\n例如: D:/videos/输出文件夹\n\n输入、输出、成功、出错文件夹最好不要为上下级目录或同一目录\n否则可能会导致处理失败")
         
@@ -754,8 +756,8 @@ class JasnaGUI:
         output_browse_btn = ttk.Button(self.settings_frame, text="浏览", command=self.browse_output_folder, style="TButton")
         output_browse_btn.place(x=450, y=80, width=60)
         
-        # 8. 出错视频存放文件夹
-        error_label = ttk.Label(self.settings_frame, text="出错视频存放文件夹", font=self.normal_font)
+        # 8. 出错原视频存放文件夹
+        error_label = ttk.Label(self.settings_frame, text="出错原视频存放文件夹", font=self.normal_font)
         error_label.place(x=530, y=80)
         Tooltip(error_label, "处理失败的原视频文件（也就是有马赛克的视频）将被移动到此文件夹\n\n例如: D:/videos/出错视频文件夹\n\n输入、输出、成功、出错文件夹最好不要为上下级目录或同一目录\n否则可能会导致处理失败")
         
@@ -1384,6 +1386,7 @@ class JasnaGUI:
             "error_folder": self.error_folder_var.get(),
             "success_folder": self.success_folder_var.get(),  # 新增
             "slice_frames_history": getattr(self, 'slice_frames_history', []),  # 添加切片帧数历史记录
+            "detection_model_history": getattr(self, 'detection_model_history', []),  # 添加检测模型历史记录
             # 检测模型设置
             "detection_model": self.detection_model_var.get(),  # 新增检测模型
             # 二次修复相关设置
@@ -1435,6 +1438,8 @@ class JasnaGUI:
                 
                 # 加载切片帧数历史记录
                 self.slice_frames_history = settings.get("slice_frames_history", [])
+                # 加载检测模型历史记录
+                self.detection_model_history = settings.get("detection_model_history", [])
                 
                 # 加载检测模型设置
                 self.detection_model_var.set(settings.get("detection_model", "rfdetr-v3"))  # 新增检测模型，默认rfdetr-v3
@@ -2167,17 +2172,24 @@ class JasnaGUI:
                 
                 # 检查当前切片帧数是否已存在于历史记录中
                 current_slice_frames = int(self.slice_frames_var.get())
-                is_first_time = current_slice_frames not in self.slice_frames_history
+                is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                 
-                # 如果是第一次使用当前切片帧数，临时修改卡死超时时间
+                # 检查当前检测模型是否已存在于历史记录中
+                current_detection_model = self.detection_model_var.get()
+                is_detection_model_first_time = current_detection_model not in self.detection_model_history
+                
+                # 判断是否需要首次编译
                 is_first_time_for_model_compile = False  # 标记是否是模型编译的首次运行
-                if is_first_time:
+                if is_slice_frames_first_time or is_detection_model_first_time:
                     # 弹窗提示用户
-                    self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数为首次使用，需要编译模型 \n所需时间为0.2小时到4小时之间"))
+                    self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数或检测模型为首次使用\n需要编译模型 \n\n所需时间为0.2小时到4小时之间"))
                     # 临时将卡死超时时间设置为15000秒
                     self.stuck_seconds_var.set("15000")
                     self.stuck_seconds_modified = True  # 标记stuck_seconds值已被修改
                     is_first_time_for_model_compile = True  # 标记本次处理是首次模型编译
+                
+                # 记录检查结果
+                self.logger.info(f"双重检查结果 - 切片帧数首次使用: {is_slice_frames_first_time}, 检测模型首次使用: {is_detection_model_first_time}")
                 
                 # 构建输出文件名（添加后缀和.mp4扩展名）
                 video_name = Path(video_file).stem
@@ -2222,7 +2234,7 @@ class JasnaGUI:
                 self.logger.info(f"开始处理视频: {video_file}")
                 self.logger.info(f"完整命令: {cmd}")
                 self.logger.info(f"工作目录: {jasna_dir}")
-                self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time}")
+                self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time_for_model_compile}")
                 
                 # 重置进度记录
                 self.progress_records = []
@@ -2371,12 +2383,18 @@ class JasnaGUI:
                         self.root.after(0, self.update_lists_display)
                         self.root.after(0, self.update_summary)
                         
-                        # 如果是首次使用当前切片帧数，将切片帧数添加到历史记录
-                        if is_first_time:
+                        # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
+                        if is_first_time_for_model_compile:
                             current_slice_frames = int(self.slice_frames_var.get())
+                            current_detection_model = self.detection_model_var.get()
+                            # 检查切片帧数是否已存在于历史记录中，避免重复添加
                             if current_slice_frames not in self.slice_frames_history:
                                 self.slice_frames_history.append(current_slice_frames)
                                 self.logger.info(f"将切片帧数 {current_slice_frames} 添加到历史记录")
+                            # 检查检测模型是否已存在于历史记录中，避免重复添加
+                            if current_detection_model not in self.detection_model_history:
+                                self.detection_model_history.append(current_detection_model)
+                                self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
                                 
                                 # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
                                 if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
@@ -2597,17 +2615,24 @@ class JasnaGUI:
                         
                         # 检查当前切片帧数是否已存在于历史记录中
                         current_slice_frames = int(self.slice_frames_var.get())
-                        is_first_time = current_slice_frames not in self.slice_frames_history
+                        is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                         
-                        # 如果是第一次使用当前切片帧数，临时修改卡死超时时间
+                        # 检查当前检测模型是否已存在于历史记录中
+                        current_detection_model = self.detection_model_var.get()
+                        is_detection_model_first_time = current_detection_model not in self.detection_model_history
+                        
+                        # 判断是否需要首次编译
                         is_first_time_for_model_compile = False  # 标记是否是模型编译的首次运行
-                        if is_first_time:
+                        if is_slice_frames_first_time or is_detection_model_first_time:
                             # 弹窗提示用户
-                            self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数为首次使用，需要编译模型 \n所需时间为0.2小时到4小时之间"))
+                            self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数或检测模型为首次使用\n需要编译模型 \n\n所需时间为0.2小时到4小时之间"))
                             # 临时将卡死超时时间设置为15000秒
                             self.stuck_seconds_var.set("15000")
                             self.stuck_seconds_modified = True  # 标记stuck_seconds值已被修改
                             is_first_time_for_model_compile = True  # 标记本次处理是首次模型编译
+                        
+                        # 记录检查结果
+                        self.logger.info(f"双重检查结果 - 切片帧数首次使用: {is_slice_frames_first_time}, 检测模型首次使用: {is_detection_model_first_time}")
                         
                         # 构建输出文件名（添加后缀和.mp4扩展名）
                         video_name = Path(video_file).stem
@@ -2652,7 +2677,7 @@ class JasnaGUI:
                         self.logger.info(f"开始处理视频: {video_file}")
                         self.logger.info(f"完整命令: {cmd}")
                         self.logger.info(f"工作目录: {jasna_dir}")
-                        self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time}")
+                        self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time_for_model_compile}")
                         
                         # 重置进度记录
                         self.progress_records = []
@@ -2796,12 +2821,18 @@ class JasnaGUI:
                                 self.root.after(0, self.update_lists_display)
                                 self.root.after(0, self.update_summary)
                                 
-                                # 如果是首次使用当前切片帧数，将切片帧数添加到历史记录
-                                if is_first_time:
+                                # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
+                                if is_first_time_for_model_compile:
                                     current_slice_frames = int(self.slice_frames_var.get())
+                                    current_detection_model = self.detection_model_var.get()
+                                    # 检查切片帧数是否已存在于历史记录中，避免重复添加
                                     if current_slice_frames not in self.slice_frames_history:
                                         self.slice_frames_history.append(current_slice_frames)
                                         self.logger.info(f"将切片帧数 {current_slice_frames} 添加到历史记录")
+                                    # 检查检测模型是否已存在于历史记录中，避免重复添加
+                                    if current_detection_model not in self.detection_model_history:
+                                        self.detection_model_history.append(current_detection_model)
+                                        self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
                                         
                                         # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
                                         if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
