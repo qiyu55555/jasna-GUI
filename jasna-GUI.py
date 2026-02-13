@@ -336,7 +336,7 @@ class JasnaGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("JASNA视频处理工具-v5.2  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
-        self.root.geometry("1170x1040")  # 窗口高度为1045，以适应状态栏下移5像素
+        self.root.geometry("1170x1040")
         
         # 设置窗口图标
         try:
@@ -696,22 +696,26 @@ class JasnaGUI:
         slice_label.place(x=530, y=0)
         Tooltip(slice_label, "视频一次性处理的帧数\n\n建议值: 30-90\n\n如果输入的数值为首次使用则需要编译模型\n时间在0.2-4小时\n请耐心等待\n\n如果编译失败\n则把数值调小后重新尝试运行\n\n编译过的模型会自动记录\n下次使用就不用再编译了")
         
-        self.slice_frames_var = tk.StringVar(value="30")
-        self.slice_frames_entry = ttk.Entry(self.settings_frame, textvariable=self.slice_frames_var, width=9, font=self.normal_font, justify='center')
-        self.slice_frames_entry.place(x=610, y=0, width=80)
+        self.slice_frames_var1 = tk.StringVar(value="60")
+        self.slice_frames_entry1 = ttk.Entry(self.settings_frame, textvariable=self.slice_frames_var1, width=4, font=self.normal_font, justify='center')
+        self.slice_frames_entry1.place(x=610, y=0, width=45)
+        
+        self.slice_frames_var2 = tk.StringVar(value="30")
+        self.slice_frames_entry2 = ttk.Entry(self.settings_frame, textvariable=self.slice_frames_var2, width=4, font=self.normal_font, justify='center')
+        self.slice_frames_entry2.place(x=660, y=0, width=45)
         
         # 3. 输出视频后缀
         suffix_label = ttk.Label(self.settings_frame, text="输出视频后缀", font=self.normal_font)
-        suffix_label.place(x=710, y=0)
+        suffix_label.place(x=720, y=0)
         Tooltip(suffix_label, "输出视频文件名的后缀\n\n例如: -U \n\n表示输出文件名为：原文件名-U.mp4")
         
         self.output_suffix_var = tk.StringVar(value="-U")
         self.output_suffix_entry = ttk.Entry(self.settings_frame, textvariable=self.output_suffix_var, width=9, font=self.normal_font, justify='center')
-        self.output_suffix_entry.place(x=825, y=0, width=80)
+        self.output_suffix_entry.place(x=835, y=0, width=80)
         
         # 4. 卡死几秒后跳过
         stuck_label = ttk.Label(self.settings_frame, text="卡死几秒后跳过", font=self.normal_font)
-        stuck_label.place(x=923, y=0)
+        stuck_label.place(x=928, y=0)
         Tooltip(stuck_label, "视频处理过程中卡死多少秒后自动跳过并处理下一个\n\n默认值: 900秒（15分钟）\n\n切片帧数为第一次使用时\n这里会自动变为15000\n模型编译完成后会自动变回之前设置的值\n不必干预，全自动处理")
         
         self.stuck_seconds_var = tk.StringVar(value="900")  # 默认900秒（15分钟）
@@ -1378,7 +1382,8 @@ class JasnaGUI:
             "jasna_path": self.jasna_path_var.get(),
             "input_folder": self.input_folder_var.get(),
             "output_folder": self.output_folder_var.get(),
-            "slice_frames": self.slice_frames_var.get(),
+            "slice_frames_1": self.slice_frames_var1.get(),
+            "slice_frames_2": self.slice_frames_var2.get(),
             "encode_params": self.encode_params_var.get(),
             "transcode_params": self.transcode_params_var.get(),  # 新增转码参数
             "output_suffix": self.output_suffix_var.get(),
@@ -1428,7 +1433,8 @@ class JasnaGUI:
                 self.jasna_path_var.set(settings.get("jasna_path", ""))
                 self.input_folder_var.set(settings.get("input_folder", ""))
                 self.output_folder_var.set(settings.get("output_folder", ""))
-                self.slice_frames_var.set(settings.get("slice_frames", "60"))
+                self.slice_frames_var1.set(settings.get("slice_frames_1", "30"))
+                self.slice_frames_var2.set(settings.get("slice_frames_2", "30"))
                 self.encode_params_var.set(settings.get("encode_params", "preset=P7,tuning_info=high_quality,rc=vbr,cq=32,aq=1,temporalaq=0,lookahead=32,gop=300"))
                 self.transcode_params_var.set(settings.get("transcode_params", "-hwaccel cuda -hwaccel_output_format cuda -c:v hevc_nvenc -preset p5 -tune hq -rc constqp -qp 15 -qp_cb_offset -2 -qp_cr_offset -2 -spatial_aq 1 -aq-strength 1 -c:a aac -b:a 128k"))  # 新增转码参数
                 self.output_suffix_var.set(settings.get("output_suffix", "-U"))
@@ -2167,11 +2173,22 @@ class JasnaGUI:
                 # 记录视频处理开始时间，用于计算处理速度
                 processing_start_time = time.time()
                 
+                # 获取视频信息并检测分辨率
+                video_width = self.get_video_info(input_path)
+                is_4k_video = video_width >= 3840
+                
                 # 记录视频信息显示状态（无论成功与否都继续处理）
                 self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
                 
+                # 根据分辨率选择切片帧数参数
+                if is_4k_video:
+                    current_slice_frames = int(self.slice_frames_var2.get())
+                    self.logger.info(f"视频分辨率为4K及以上，使用第二个输入框的切片帧数: {current_slice_frames}")
+                else:
+                    current_slice_frames = int(self.slice_frames_var1.get())
+                    self.logger.info(f"视频分辨率低于4K，使用第一个输入框的切片帧数: {current_slice_frames}")
+                
                 # 检查当前切片帧数是否已存在于历史记录中
-                current_slice_frames = int(self.slice_frames_var.get())
                 is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                 
                 # 检查当前检测模型是否已存在于历史记录中
@@ -2206,8 +2223,8 @@ class JasnaGUI:
                 # 构建命令字符串
                 encode_params = f'"{self.encode_params_var.get()}"'
                 
-                # 构建基础命令
-                cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {self.slice_frames_var.get()} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                # 构建基础命令，使用根据分辨率选择的切片帧数
+                cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
                 
                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                 secondary_fix_option = self.secondary_fix_var.get()
@@ -2385,7 +2402,7 @@ class JasnaGUI:
                         
                         # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                         if is_first_time_for_model_compile:
-                            current_slice_frames = int(self.slice_frames_var.get())
+                            current_slice_frames = int(self.slice_frames_var1.get())
                             current_detection_model = self.detection_model_var.get()
                             # 检查切片帧数是否已存在于历史记录中，避免重复添加
                             if current_slice_frames not in self.slice_frames_history:
@@ -2610,11 +2627,22 @@ class JasnaGUI:
                         # 记录视频处理开始时间，用于计算处理速度
                         processing_start_time = time.time()
                         
+                        # 获取视频信息并检测分辨率
+                        video_width = self.get_video_info(input_path)
+                        is_4k_video = video_width >= 3840
+                        
                         # 记录视频信息显示状态（无论成功与否都继续处理）
                         self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
                         
+                        # 根据分辨率选择切片帧数参数
+                        if is_4k_video:
+                            current_slice_frames = int(self.slice_frames_var2.get())
+                            self.logger.info(f"视频分辨率为4K及以上，使用第二个输入框的切片帧数: {current_slice_frames}")
+                        else:
+                            current_slice_frames = int(self.slice_frames_var1.get())
+                            self.logger.info(f"视频分辨率低于4K，使用第一个输入框的切片帧数: {current_slice_frames}")
+                        
                         # 检查当前切片帧数是否已存在于历史记录中
-                        current_slice_frames = int(self.slice_frames_var.get())
                         is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                         
                         # 检查当前检测模型是否已存在于历史记录中
@@ -2649,8 +2677,8 @@ class JasnaGUI:
                         # 构建命令字符串
                         encode_params = f'"{self.encode_params_var.get()}"'
                         
-                        # 构建基础命令
-                        cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {self.slice_frames_var.get()} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                        # 构建基础命令，使用根据分辨率选择的切片帧数
+                        cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
                         
                         # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                         secondary_fix_option = self.secondary_fix_var.get()
@@ -2823,7 +2851,7 @@ class JasnaGUI:
                                 
                                 # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                                 if is_first_time_for_model_compile:
-                                    current_slice_frames = int(self.slice_frames_var.get())
+                                    current_slice_frames = int(self.slice_frames_var1.get())
                                     current_detection_model = self.detection_model_var.get()
                                     # 检查切片帧数是否已存在于历史记录中，避免重复添加
                                     if current_slice_frames not in self.slice_frames_history:
@@ -3641,14 +3669,14 @@ class JasnaGUI:
             self.video_duration_var.set(duration_str)
             
             self.logger.info(f"成功获取视频信息 - 分辨率: {resolution}, 帧率: {fps_str}, 时长: {duration_str}")
-            return True
+            return width
             
         except ImportError:
             self.logger.error("pymediainfo库未安装")
-            return False
+            return 0
         except Exception as e:
             self.logger.error(f"使用pymediainfo获取视频信息时出错: {str(e)}", exc_info=True)
-            return False
+            return 0
         
     def estimate_total_frames(self, video_path):
         """估算视频总帧数"""
