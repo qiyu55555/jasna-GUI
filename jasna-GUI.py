@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v5.2  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
+        self.root.title("JASNA视频处理工具-v5.3  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
         self.root.geometry("1170x1040")
         
         # 设置窗口图标
@@ -432,8 +432,7 @@ class JasnaGUI:
         self.original_stuck_seconds = None
         self.stuck_seconds_modified = False
         
-        # 初始化ffprobe预热标志
-        self.ffprobe_warmed_up = False
+
         self.first_video_processed = False  # 添加标志以跟踪是否已处理第一个视频
         
         # 创建GUI组件
@@ -699,10 +698,12 @@ class JasnaGUI:
         self.slice_frames_var1 = tk.StringVar(value="60")
         self.slice_frames_entry1 = ttk.Entry(self.settings_frame, textvariable=self.slice_frames_var1, width=4, font=self.normal_font, justify='center')
         self.slice_frames_entry1.place(x=610, y=0, width=45)
+        Tooltip(self.slice_frames_entry1, "用于1080P分辨率的切片帧数\n\n所有分辨率低于4K的视频都会使用此切片帧数")
         
         self.slice_frames_var2 = tk.StringVar(value="30")
         self.slice_frames_entry2 = ttk.Entry(self.settings_frame, textvariable=self.slice_frames_var2, width=4, font=self.normal_font, justify='center')
         self.slice_frames_entry2.place(x=660, y=0, width=45)
+        Tooltip(self.slice_frames_entry2, "用于4K分辨率的切片帧数\n\n所有分辨率大于或等于4K的视频都会使用此切片帧数")
         
         # 3. 输出视频后缀
         suffix_label = ttk.Label(self.settings_frame, text="输出视频后缀", font=self.normal_font)
@@ -797,7 +798,7 @@ class JasnaGUI:
         Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: rfdetr-v3\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v3: 最新版本的RFDetr模型，也就是jasna-v3检测模型\nlada-yolo-v4: 最新版本的Lada-YOLO模型，也就是lada-v4f模型\nrfdetr-v2: 旧版本的RFDetr模型，也就是jasna-v2检测模型\nlada-yolo-v2: 旧版本的Lada-YOLO模型，也就是lada-v2模型''')
         
         # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
-        detection_model_options = ["rfdetr-v3", "lada-yolo-v4", "rfdetr-v2", "lada-yolo-v2"]
+        detection_model_options = ["rfdetr-v4", "lada-yolo-v4", "rfdetr-v3", "lada-yolo-v2"]
         self.detection_model_current_option_index = 0  # 当前选项索引
         
         # 确保detection_model_var被正确初始化
@@ -1466,46 +1467,7 @@ class JasnaGUI:
         except Exception as e:
             self.logger.error(f"加载设置失败: {str(e)}")
     
-    def warm_up_ffprobe(self):
-        """预热ffprobe，确保它已准备好使用"""
-        if self.ffprobe_warmed_up:
-            return  # 已经预热过了
-        
-        try:
-            import subprocess
-            import time
-            from pathlib import Path
-            import sys
-            
-            # Windows平台上隐藏控制台窗口的标志
-            startupinfo = None
-            if sys.platform.startswith('win'):
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-            
-            # 尝试运行ffprobe版本命令作为预热
-            result = subprocess.run(['ffprobe', '-version'], 
-                                  capture_output=True, text=True, timeout=10,
-                                  startupinfo=startupinfo)
-            
-            if result.returncode != 0:
-                # 如果系统PATH中没有ffprobe，尝试使用本地的
-                script_dir = Path(__file__).parent.resolve()
-                local_ffprobe_path = script_dir / 'ffprobe.exe'
-                if local_ffprobe_path.exists():
-                    result = subprocess.run([str(local_ffprobe_path), '-version'], 
-                                          capture_output=True, text=True, timeout=10,
-                                          startupinfo=startupinfo)
-            
-            # 等待一小段时间让ffprobe完成初始化
-            time.sleep(0.5)
-            self.ffprobe_warmed_up = True
-            self.logger.info("ffprobe已预热")
-        except Exception as e:
-            self.logger.warning(f"ffprobe预热失败: {str(e)}")
-            # 即使预热失败，也要标记为已尝试
-            self.ffprobe_warmed_up = True
+
 
     def get_video_basic_info(self, video_path):
         """获取视频基本信息（分辨率、帧率、时长）- 简化版，只返回信息"""
@@ -2170,15 +2132,512 @@ class JasnaGUI:
                 success = self.get_video_info(input_path)
                 self.logger.info(f"get_video_info函数返回值: {success}")
                 
+                # 检查视频帧率是否是标准帧率
+                fps_str = self.video_fps_var.get()
+                standard_fps = [23.976, 24, 25, 29.97, 30, 59.94, 60, 120]
+                is_standard_fps = False
+                
+                if fps_str != "未知":
+                    try:
+                        fps = float(fps_str)
+                        # 检查帧率是否在标准帧率列表中，允许小误差
+                        for standard_f in standard_fps:
+                            if abs(fps - standard_f) < 0.001:
+                                is_standard_fps = True
+                                break
+                    except ValueError:
+                        pass
+                
+                # 记录视频信息显示状态
+                self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
+                
+                # 如果帧率不是标准帧率，则直接标记为处理出错并进行转码处理
+                if not is_standard_fps:
+                    self.logger.warning(f"视频帧率不是标准帧率: {fps_str}，直接标记为处理出错并进行转码处理")
+                    
+                    # 将视频从未处理列表移到错误列表
+                    item_to_remove = None
+                    for item in self.video_lists["unprocessed"]:
+                        if (isinstance(item, dict) and item['name'] == video_file) or \
+                           (isinstance(item, str) and item == video_file):
+                            item_to_remove = item
+                            break
+                    
+                    if item_to_remove is not None:
+                        self.video_lists["unprocessed"].remove(item_to_remove)
+                        # 保持相同的数据结构格式
+                        if isinstance(item_to_remove, dict):
+                            self.video_lists["error"].append(item_to_remove)
+                        else:
+                            self.video_lists["error"].append(video_file)
+                    
+                    # 移动源视频到错误文件夹
+                    error_folder = self.error_folder_var.get()
+                    if error_folder:
+                        error_moved = self.move_to_error_folder(input_path, video_file)
+                        if error_moved:
+                            self.logger.info(f"错误视频已移动到错误文件夹: {video_file}")
+                        else:
+                            self.logger.warning(f"错误视频移动失败: {video_file}")
+                    
+                    # 更新GUI
+                    self.root.after(0, self.update_lists_display)
+                    self.root.after(0, self.update_summary)
+                    
+                    self.logger.error(f"视频处理失败: {video_file}")
+                    self.root.after(0, lambda: self.status_var.set(f"视频处理失败: {video_file}"))
+                    
+                    # 立即对错误视频执行转码操作
+                    if error_folder and os.path.exists(error_folder):
+                        error_video_path = os.path.join(error_folder, video_file)
+                        if os.path.exists(error_video_path):
+                            # 检查是否用户请求停止处理
+                            if self.stop_processing:
+                                self.logger.info("用户请求停止处理，跳过转码")
+                                break
+                            
+                            self.logger.info(f"开始转码错误视频: {video_file}")
+                            
+                            # 设置转码状态
+                            self.root.after(0, lambda vm=video_file: self.current_video_var.set(vm))
+                            self.root.after(0, lambda: self.processing_mode_var.set("转码"))
+                            
+                            # 执行转码
+                            transcoded_video_name = f"{Path(video_file).stem}-转码{Path(video_file).suffix}"
+                            transcoded_video_path = os.path.join(self.input_folder_var.get(), transcoded_video_name)
+                            
+                            transcode_success = self.transcode_video(error_video_path, transcoded_video_path)
+                            
+                            # 检查是否用户请求停止处理
+                            if self.stop_processing:
+                                self.logger.info("用户请求停止处理，跳过再次处理")
+                                break
+                            
+                            if transcode_success:
+                                # 转码成功，立即对转码后的视频再次执行处理操作
+                                self.logger.info(f"转码成功，开始再次处理转码后的视频: {transcoded_video_name}")
+                                
+                                # 重置卡死标志
+                                self.is_stuck = False
+                                self.stuck_detected = False
+                                
+                                # 重置处理错误标志
+                                self.processing_error = False
+                                
+                                self.currently_processing = transcoded_video_name
+                                self.current_video_var.set(transcoded_video_name)
+                                self.processing_mode_var.set("破解")  # 设置为破解模式
+                                
+                                # 重置进度信息显示
+                                self.root.after(0, self.reset_progress_display)
+                                
+                                # 构建输入路径
+                                transcoded_input_path = os.path.join(self.input_folder_var.get(), transcoded_video_name)
+                                
+                                self.logger.info(f"构建的转码后视频输入路径: {transcoded_input_path}")
+                                self.logger.info(f"输入文件夹: {self.input_folder_var.get()}")
+                                self.logger.info(f"转码后视频文件: {transcoded_video_name}")
+                                self.logger.info(f"输入路径是否存在: {os.path.exists(transcoded_input_path)}")
+                                
+                                # 获取视频信息
+                                self.logger.info("开始调用get_video_info函数")
+                                success = self.get_video_info(transcoded_input_path)
+                                self.logger.info(f"get_video_info函数返回值: {success}")
+                                
+                                # 记录视频处理开始时间，用于计算处理速度
+                                processing_start_time = time.time()
+                                
+                                # 获取视频信息并检测分辨率
+                                video_width = self.get_video_info(transcoded_input_path)
+                                is_4k_video = video_width >= 3840
+                                
+                                # 记录视频信息显示状态（无论成功与否都继续处理）
+                                self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
+                                
+                                # 根据分辨率选择切片帧数参数
+                                if is_4k_video:
+                                    current_slice_frames = int(self.slice_frames_var2.get())
+                                    self.logger.info(f"视频分辨率为4K及以上，使用第二个输入框的切片帧数: {current_slice_frames}")
+                                else:
+                                    current_slice_frames = int(self.slice_frames_var1.get())
+                                    self.logger.info(f"视频分辨率低于4K，使用第一个输入框的切片帧数: {current_slice_frames}")
+                                
+                                # 检查当前切片帧数是否已存在于历史记录中
+                                is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
+                                
+                                # 检查当前检测模型是否已存在于历史记录中
+                                current_detection_model = self.detection_model_var.get()
+                                is_detection_model_first_time = current_detection_model not in self.detection_model_history
+                                
+                                # 判断是否需要首次编译
+                                is_first_time_for_model_compile = False  # 标记是否是模型编译的首次运行
+                                if is_slice_frames_first_time or is_detection_model_first_time:
+                                    # 弹窗提示用户
+                                    self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数或检测模型为首次使用\n需要编译模型 \n\n所需时间为0.2小时到4小时之间"))
+                                    # 临时将卡死超时时间设置为15000秒
+                                    self.stuck_seconds_var.set("15000")
+                                    self.stuck_seconds_modified = True  # 标记stuck_seconds值已被修改
+                                    is_first_time_for_model_compile = True  # 标记本次处理是首次模型编译
+                                
+                                # 记录检查结果
+                                self.logger.info(f"双重检查结果 - 切片帧数首次使用: {is_slice_frames_first_time}, 检测模型首次使用: {is_detection_model_first_time}")
+                                
+                                # 构建输出文件名（添加后缀和.mp4扩展名）
+                                transcoded_video_name_only = Path(transcoded_video_name).stem
+                                suffix = self.output_suffix_var.get()
+                                final_output_filename = f"{transcoded_video_name_only}{suffix}.mp4"
+                                final_output_path = os.path.join(output_folder, final_output_filename)
+                                
+                                # 启动卡死监测线程（根据是否首次使用设置不同的阈值）
+                                if is_first_time_for_model_compile:
+                                    self.start_stuck_monitor(custom_stuck_seconds=15000)
+                                else:
+                                    self.start_stuck_monitor()
+                                
+                                # 构建命令字符串
+                                encode_params = f'"{self.encode_params_var.get()}"'
+                                
+                                # 构建基础命令，使用根据分辨率选择的切片帧数
+                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                                
+                                # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
+                                secondary_fix_option = self.secondary_fix_var.get()
+                                if secondary_fix_option == "TVAI":
+                                    # 添加TVAI相关参数
+                                    ffmpeg_path = self.ffmpeg_path_var.get()
+                                    model_name = self.tvai_model_var.get()
+                                    scale = self.tvai_scale_var.get()
+                                    threads = self.tvai_threads_var.get()
+                                    tvai_params = self.tvai_params_var.get()
+                                    
+                                    # 处理TVAI缩放参数的特殊转换规则
+                                    if scale == "1":
+                                        tvai_scale = "0"
+                                    else:
+                                        tvai_scale = scale
+                                    
+                                    cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
+                                elif secondary_fix_option == "Swin2SR":
+                                    # 添加Swin2SR相关参数
+                                    batch_size = self.swin2sr_batch_size_var.get()
+                                    cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
+                                
+                                self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
+                                self.logger.info(f"完整命令: {cmd}")
+                                self.logger.info(f"工作目录: {jasna_dir}")
+                                self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time_for_model_compile}")
+                                
+                                # 重置进度记录
+                                self.progress_records = []
+                                self.last_progress_time = time.time()
+                                self.last_progress_value = 0
+                                self.progress_output_lines = []
+                                
+                                # 启动子进程 - 在jasna目录中执行命令
+                                process = subprocess.Popen(
+                                    cmd,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT,  # 合并stderr到stdout
+                                    universal_newlines=True,
+                                    shell=True,
+                                    cwd=jasna_dir,
+                                    bufsize=1  # 行缓冲
+                                )
+                                
+                                # 保存当前进程引用，用于停止功能
+                                self.current_process = process
+                                
+                                # 启动输出监控线程
+                                output_thread = threading.Thread(
+                                    target=self.monitor_jasna_output,
+                                    args=(process, transcoded_video_name)
+                                )
+                                output_thread.daemon = True
+                                output_thread.start()
+                                
+                                # 等待进程完成
+                                return_code = process.wait()
+                                
+                                # 等待输出线程结束
+                                output_thread.join(timeout=5)
+                                
+                                # 停止卡死监测线程
+                                self.stop_stuck_monitor()
+                                
+                                # 清除当前进程引用
+                                self.current_process = None
+                                
+                                # 检查是否因卡死而终止
+                                if self.stuck_detected:
+                                    self.logger.warning(f"检测到转码后视频卡死，已终止处理: {transcoded_video_name}")
+                                    
+                                    # 如果是首次使用当前切片帧数且发生卡死（模型编译失败），弹窗提示错误
+                                    if is_first_time_for_model_compile:
+                                        self.root.after(0, lambda: self.show_custom_messagebox("error", "错误", "模型编译失败，请检查系统设置、内存大小、显存大小，可适当调低切片帧数后重新运行"))
+                                        
+                                        # 立即恢复原始的stuck_seconds值，因为模型编译失败，不需要将切片帧数添加到历史记录
+                                        if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                            self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                            self.stuck_seconds_modified = False
+                                            self.logger.info(f"模型编译失败 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                        
+                                        # 不将当前切片帧数添加到历史记录，直接跳出
+                                        continue
+                                    
+                                    # 执行卡死处理流程
+                                    self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder)
+                                    
+                                    # 检查是否用户请求停止处理
+                                    if self.stop_processing:
+                                        self.logger.info("用户请求停止处理，退出视频处理循环")
+                                        break
+                                    
+                                    # 重置当前处理视频
+                                    self.currently_processing = None
+                                    self.current_video_var.set("无")
+                                    self.processing_mode_var.set("破解")  # 重置为默认破解模式
+                                    
+                                    # 重置进度条
+                                    self.root.after(0, self.reset_progress_display)
+                                    
+                                    # 清空日志文件
+                                    self.clear_log_file()
+                                    
+                                    # 重置停止标志，以便继续处理下一个视频
+                                    self.stop_processing = False
+                                    continue
+                                
+                                # 检查进程是否成功完成
+                                if return_code == 0 and not self.stop_processing:
+                                    # 处理成功
+                                    # 检查最终文件是否存在
+                                    success = self.check_final_file_exists(transcoded_video_name_only, suffix, output_folder)
+                                    
+                                    if success:
+                                        # 计算处理速度 - 与直接处理成功的计算方式一致
+                                        processing_end_time = time.time()
+                                        processing_duration = processing_end_time - processing_start_time  # 处理该视频的总运行时间（秒）
+                                        
+                                        # 使用总帧数除以处理时间来计算速度
+                                        total_frames = self.estimate_total_frames(transcoded_input_path)
+                                        if total_frames > 0 and processing_duration > 0:
+                                            processing_speed = total_frames / processing_duration
+                                            processing_speed_str = f"{int(processing_speed)}fps"
+                                        else:
+                                            processing_speed_str = "未知"
+                                        
+                                        # 将转码后的视频从未处理列表移到已处理列表
+                                        # 先找到要移除的项
+                                        item_to_remove = None
+                                        for item in self.video_lists["unprocessed"]:
+                                            if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                               (isinstance(item, str) and item == transcoded_video_name):
+                                                item_to_remove = item
+                                                break
+                                        
+                                        if item_to_remove is not None:
+                                            self.video_lists["unprocessed"].remove(item_to_remove)
+                                            # 保持相同的数据结构格式，但为已处理视频添加处理速度信息
+                                            if isinstance(item_to_remove, dict):
+                                                processed_video_info = {
+                                                    'name': item_to_remove['name'],
+                                                    'processing_speed': processing_speed_str
+                                                }
+                                            else:
+                                                processed_video_info = {
+                                                    'name': transcoded_video_name,
+                                                    'processing_speed': processing_speed_str
+                                                }
+                                            
+                                            self.video_lists["processed"].append(processed_video_info)
+                                        
+                                        # 处理成功后移动源视频到成功文件夹
+                                        success_folder = self.success_folder_var.get()
+                                        if success_folder:
+                                            success_moved = self.move_to_success_folder(transcoded_input_path, transcoded_video_name)
+                                            if success_moved:
+                                                self.logger.info(f"成功视频已移动到成功文件夹: {transcoded_video_name}")
+                                            else:
+                                                self.logger.warning(f"成功视频移动失败: {transcoded_video_name}")
+                                        
+                                        # 从错误列表中移除原始视频并添加到已处理列表
+                                        # 先找到要移除的原始视频项
+                                        original_item_to_remove = None
+                                        for item in self.video_lists["error"]:
+                                            if (isinstance(item, dict) and item['name'] == video_file) or \
+                                               (isinstance(item, str) and item == video_file):
+                                                original_item_to_remove = item
+                                                break
+                                        
+                                        if original_item_to_remove is not None:
+                                            self.video_lists["error"].remove(original_item_to_remove)
+                                            # 创建已处理视频的信息（包含处理速度）
+                                            if isinstance(original_item_to_remove, dict):
+                                                processed_original_video_info = {
+                                                    'name': original_item_to_remove['name'],
+                                                    'processing_speed': processing_speed_str
+                                                }
+                                            else:
+                                                processed_original_video_info = {
+                                                    'name': video_file,
+                                                    'processing_speed': processing_speed_str
+                                                }
+                                            self.video_lists["processed"].append(processed_original_video_info)
+                                            
+                                            # 将原始视频从错误文件夹移动到成功文件夹
+                                            success_folder = self.success_folder_var.get()
+                                            if success_folder:
+                                                original_error_video_path = os.path.join(error_folder, video_file)
+                                                if os.path.exists(original_error_video_path):
+                                                    # 构建成功文件夹中的目标路径
+                                                    success_original_video_path = os.path.join(success_folder, video_file)
+                                                    try:
+                                                        # 移动文件
+                                                        shutil.move(original_error_video_path, success_original_video_path)
+                                                        self.logger.info(f"原始错误视频已移动到成功文件夹: {video_file}")
+                                                    except Exception as e:
+                                                        self.logger.error(f"移动原始错误视频时出错: {str(e)}")
+                                        
+                                        # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
+                                        if is_first_time_for_model_compile:
+                                            current_detection_model = self.detection_model_var.get()
+                                            # 检查切片帧数是否已存在于历史记录中，避免重复添加
+                                            if current_slice_frames not in self.slice_frames_history:
+                                                self.slice_frames_history.append(current_slice_frames)
+                                                self.logger.info(f"将切片帧数 {current_slice_frames} 添加到历史记录")
+                                            # 检查检测模型是否已存在于历史记录中，避免重复添加
+                                            if current_detection_model not in self.detection_model_history:
+                                                self.detection_model_history.append(current_detection_model)
+                                                self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
+                                                
+                                            # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
+                                            if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                                self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                                self.stuck_seconds_modified = False
+                                                self.logger.info(f"首次运行完成 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                            
+                                            # 立即保存配置文件，确保历史记录被保存
+                                            self.save_settings()
+                                            self.logger.info("编译模式处理成功，已保存配置文件")
+                                        
+                                        # 更新GUI
+                                        self.root.after(0, self.update_lists_display)
+                                        self.root.after(0, self.update_summary)
+                                        
+                                        self.logger.info(f"转码后视频处理完成: {transcoded_video_name}")
+                                        self.root.after(0, lambda: self.status_var.set(f"转码后视频处理完成: {transcoded_video_name}"))
+                                    else:
+                                        # 最终文件不存在，视为处理失败
+                                        self.logger.error(f"转码后视频处理完成但最终文件不存在: {transcoded_video_name}")
+                                        
+                                        # 将视频从未处理列表移到错误列表
+                                        # 先找到要移除的项
+                                        item_to_remove = None
+                                        for item in self.video_lists["unprocessed"]:
+                                            if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                               (isinstance(item, str) and item == transcoded_video_name):
+                                                item_to_remove = item
+                                                break
+                                        
+                                        if item_to_remove is not None:
+                                            self.video_lists["unprocessed"].remove(item_to_remove)
+                                            # 保持相同的数据结构格式
+                                            if isinstance(item_to_remove, dict):
+                                                self.video_lists["error"].append(item_to_remove)
+                                            else:
+                                                self.video_lists["error"].append(transcoded_video_name)
+                                        
+                                        # 删除转码后的视频文件
+                                        if os.path.exists(transcoded_input_path):
+                                            try:
+                                                os.remove(transcoded_input_path)
+                                                self.logger.info(f"已删除转码后的视频文件: {transcoded_video_name}")
+                                            except Exception as e:
+                                                self.logger.error(f"删除转码后视频文件时出错: {str(e)}")
+                                        
+                                        # 更新GUI
+                                        self.root.after(0, self.update_lists_display)
+                                        self.root.after(0, self.update_summary)
+                                        
+                                        self.logger.error(f"转码后视频处理失败，最终文件未生成: {transcoded_video_name}")
+                                        self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败，最终文件未生成: {transcoded_video_name}"))
+                                else:
+                                    # 处理失败或被停止
+                                    if self.stop_processing:
+                                        self.logger.info(f"转码后视频处理被用户停止: {transcoded_video_name}")
+                                        
+                                        # 延迟2秒后删除输出文件夹中所有该视频的临时文件（包括最终文件）
+                                        self.root.after(2000, lambda: self.cleanup_temp_files_after_stop(transcoded_video_name_only, suffix, output_folder, delete_final_file=True))
+                                        
+                                        # 如果用户停止，不清空列表，视频保留在未处理列表中
+                                        self.root.after(0, lambda: self.status_var.set(f"转码后视频处理被停止: {transcoded_video_name}"))
+                                        break  # 跳出循环，不再处理后续视频
+                                    else:
+                                        # 处理失败后恢复原始的stuck_seconds值
+                                        if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                            self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                            self.stuck_seconds_modified = False
+                                            self.logger.info(f"转码后视频处理失败 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                        
+                                        self.logger.error(f"JASNA返回错误代码: {return_code}")
+                                        
+                                        # 清理可能生成的临时文件（包括最终文件）
+                                        self.cleanup_temp_files(transcoded_video_name_only, suffix, output_folder, delete_final_file=True)
+                                        
+                                        # 将视频从未处理列表移到错误列表
+                                        # 先找到要移除的项
+                                        item_to_remove = None
+                                        for item in self.video_lists["unprocessed"]:
+                                            if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                               (isinstance(item, str) and item == transcoded_video_name):
+                                                item_to_remove = item
+                                                break
+                                        
+                                        if item_to_remove is not None:
+                                            self.video_lists["unprocessed"].remove(item_to_remove)
+                                            # 保持相同的数据结构格式
+                                            if isinstance(item_to_remove, dict):
+                                                self.video_lists["error"].append(item_to_remove)
+                                            else:
+                                                self.video_lists["error"].append(transcoded_video_name)
+                                        
+                                        # 删除转码后的视频文件
+                                        if os.path.exists(transcoded_input_path):
+                                            try:
+                                                os.remove(transcoded_input_path)
+                                                self.logger.info(f"已删除转码后的视频文件: {transcoded_video_name}")
+                                            except Exception as e:
+                                                self.logger.error(f"删除转码后视频文件时出错: {str(e)}")
+                                        
+                                        # 更新GUI
+                                        self.root.after(0, self.update_lists_display)
+                                        self.root.after(0, self.update_summary)
+                                        
+                                        self.logger.error(f"转码后视频处理失败: {transcoded_video_name}")
+                                        self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败: {transcoded_video_name}"))
+                            else:
+                                self.logger.error(f"转码失败: {video_file}")
+                    
+                    # 重置当前处理视频
+                    self.currently_processing = None
+                    self.current_video_var.set("无")
+                    
+                    # 重置进度条
+                    self.root.after(0, self.reset_progress_display)
+                    
+                    # 清空日志文件
+                    self.clear_log_file()
+                    
+                    # 重置停止标志，以便继续处理下一个视频
+                    self.stop_processing = False
+                    continue
+                
                 # 记录视频处理开始时间，用于计算处理速度
                 processing_start_time = time.time()
                 
                 # 获取视频信息并检测分辨率
                 video_width = self.get_video_info(input_path)
                 is_4k_video = video_width >= 3840
-                
-                # 记录视频信息显示状态（无论成功与否都继续处理）
-                self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
                 
                 # 根据分辨率选择切片帧数参数
                 if is_4k_video:
@@ -2224,7 +2683,7 @@ class JasnaGUI:
                 encode_params = f'"{self.encode_params_var.get()}"'
                 
                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
                 
                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                 secondary_fix_option = self.secondary_fix_var.get()
@@ -2313,6 +2772,11 @@ class JasnaGUI:
                     # 执行卡死处理流程
                     self.handle_stuck_video(video_file, input_path, video_name, suffix, output_folder)
                     
+                    # 检查是否用户请求停止处理
+                    if self.stop_processing:
+                        self.logger.info("用户请求停止处理，退出视频处理循环")
+                        break
+                    
                     # 重置当前处理视频
                     self.currently_processing = None
                     self.current_video_var.set("无")
@@ -2323,11 +2787,8 @@ class JasnaGUI:
                     # 清空日志文件
                     self.clear_log_file()
                     
-                    # 重要修复：跳过当前卡死视频，继续处理下一个视频
-                    # 不需要执行后续的成功/失败检查，直接continue到下一个循环
-                    # 重置停止标志，以便继续处理下一个视频
-                    self.stop_processing = False
-                    continue
+                    # 不使用continue，因为handle_stuck_video方法已经包含了转码和再次处理的逻辑
+                    # 直接继续执行后续代码
                 
                 # 检查进程是否成功完成
                 if return_code == 0 and not self.stop_processing and not self.processing_error:
@@ -2402,7 +2863,6 @@ class JasnaGUI:
                         
                         # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                         if is_first_time_for_model_compile:
-                            current_slice_frames = int(self.slice_frames_var1.get())
                             current_detection_model = self.detection_model_var.get()
                             # 检查切片帧数是否已存在于历史记录中，避免重复添加
                             if current_slice_frames not in self.slice_frames_history:
@@ -2413,11 +2873,15 @@ class JasnaGUI:
                                 self.detection_model_history.append(current_detection_model)
                                 self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
                                 
-                                # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
-                                if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
-                                    self.stuck_seconds_var.set(self.original_stuck_seconds)
-                                    self.stuck_seconds_modified = False
-                                    self.logger.info(f"首次运行完成 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                            # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
+                            if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                self.stuck_seconds_modified = False
+                                self.logger.info(f"首次运行完成 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                            
+                            # 立即保存配置文件，确保历史记录被保存
+                            self.save_settings()
+                            self.logger.info("编译模式处理成功，已保存配置文件")
                         
                         # 处理成功后移动源视频到成功文件夹（新增）
                         success_folder = self.success_folder_var.get()
@@ -2508,8 +2972,435 @@ class JasnaGUI:
                         self.root.after(0, self.update_lists_display)
                         self.root.after(0, self.update_summary)
                         
+                        # 处理失败后恢复原始的stuck_seconds值
+                        if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                            self.stuck_seconds_var.set(self.original_stuck_seconds)
+                            self.stuck_seconds_modified = False
+                            self.logger.info(f"视频处理失败 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                        
                         self.logger.error(f"视频处理失败: {video_file}")
                         self.root.after(0, lambda: self.status_var.set(f"视频处理失败: {video_file}"))
+                        
+                        # 立即对错误视频执行转码操作
+                        if error_folder and os.path.exists(error_folder):
+                            error_video_path = os.path.join(error_folder, video_file)
+                            if os.path.exists(error_video_path):
+                                # 检查是否用户请求停止处理
+                                if self.stop_processing:
+                                    self.logger.info("用户请求停止处理，跳过转码")
+                                    break
+                                
+                                self.logger.info(f"开始转码错误视频: {video_file}")
+                                
+                                # 设置转码状态
+                                self.root.after(0, lambda vm=video_file: self.current_video_var.set(vm))
+                                self.root.after(0, lambda: self.processing_mode_var.set("转码"))
+                                
+                                # 执行转码
+                                transcoded_video_name = f"{Path(video_file).stem}-转码{Path(video_file).suffix}"
+                                transcoded_video_path = os.path.join(self.input_folder_var.get(), transcoded_video_name)
+                                
+                                transcode_success = self.transcode_video(error_video_path, transcoded_video_path)
+                                
+                                # 检查是否用户请求停止处理
+                                if self.stop_processing:
+                                    self.logger.info("用户请求停止处理，跳过再次处理")
+                                    break
+                                
+                                if transcode_success:
+                                    # 转码成功，立即对转码后的视频再次执行处理操作
+                                    self.logger.info(f"转码成功，开始再次处理转码后的视频: {transcoded_video_name}")
+                                    
+                                    # 重置卡死标志
+                                    self.is_stuck = False
+                                    self.stuck_detected = False
+                                    
+                                    # 重置处理错误标志
+                                    self.processing_error = False
+                                    
+                                    self.currently_processing = transcoded_video_name
+                                    self.current_video_var.set(transcoded_video_name)
+                                    self.processing_mode_var.set("破解")  # 设置为破解模式
+                                    
+                                    # 重置进度信息显示
+                                    self.root.after(0, self.reset_progress_display)
+                                    
+                                    # 构建输入路径
+                                    transcoded_input_path = os.path.join(self.input_folder_var.get(), transcoded_video_name)
+                                    
+                                    self.logger.info(f"构建的转码后视频输入路径: {transcoded_input_path}")
+                                    self.logger.info(f"输入文件夹: {self.input_folder_var.get()}")
+                                    self.logger.info(f"转码后视频文件: {transcoded_video_name}")
+                                    self.logger.info(f"输入路径是否存在: {os.path.exists(transcoded_input_path)}")
+                                    
+                                    # 获取视频信息
+                                    self.logger.info("开始调用get_video_info函数")
+                                    success = self.get_video_info(transcoded_input_path)
+                                    self.logger.info(f"get_video_info函数返回值: {success}")
+                                    
+                                    # 记录视频处理开始时间，用于计算处理速度
+                                    processing_start_time = time.time()
+                                    
+                                    # 获取视频信息并检测分辨率
+                                    video_width = self.get_video_info(transcoded_input_path)
+                                    is_4k_video = video_width >= 3840
+                                    
+                                    # 记录视频信息显示状态（无论成功与否都继续处理）
+                                    self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
+                                    
+                                    # 根据分辨率选择切片帧数参数
+                                    if is_4k_video:
+                                        current_slice_frames = int(self.slice_frames_var2.get())
+                                        self.logger.info(f"视频分辨率为4K及以上，使用第二个输入框的切片帧数: {current_slice_frames}")
+                                    else:
+                                        current_slice_frames = int(self.slice_frames_var1.get())
+                                        self.logger.info(f"视频分辨率低于4K，使用第一个输入框的切片帧数: {current_slice_frames}")
+                                    
+                                    # 检查当前切片帧数是否已存在于历史记录中
+                                    is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
+                                    
+                                    # 检查当前检测模型是否已存在于历史记录中
+                                    current_detection_model = self.detection_model_var.get()
+                                    is_detection_model_first_time = current_detection_model not in self.detection_model_history
+                                    
+                                    # 判断是否需要首次编译
+                                    is_first_time_for_model_compile = False  # 标记是否是模型编译的首次运行
+                                    if is_slice_frames_first_time or is_detection_model_first_time:
+                                        # 弹窗提示用户
+                                        self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数或检测模型为首次使用\n需要编译模型 \n\n所需时间为0.2小时到4小时之间"))
+                                        # 临时将卡死超时时间设置为15000秒
+                                        self.stuck_seconds_var.set("15000")
+                                        self.stuck_seconds_modified = True  # 标记stuck_seconds值已被修改
+                                        is_first_time_for_model_compile = True  # 标记本次处理是首次模型编译
+                                    
+                                    # 记录检查结果
+                                    self.logger.info(f"双重检查结果 - 切片帧数首次使用: {is_slice_frames_first_time}, 检测模型首次使用: {is_detection_model_first_time}")
+                                    
+                                    # 构建输出文件名（添加后缀和.mp4扩展名）
+                                    transcoded_video_name_only = Path(transcoded_video_name).stem
+                                    suffix = self.output_suffix_var.get()
+                                    final_output_filename = f"{transcoded_video_name_only}{suffix}.mp4"
+                                    final_output_path = os.path.join(output_folder, final_output_filename)
+                                    
+                                    # 启动卡死监测线程（根据是否首次使用设置不同的阈值）
+                                    if is_first_time_for_model_compile:
+                                        self.start_stuck_monitor(custom_stuck_seconds=15000)
+                                    else:
+                                        self.start_stuck_monitor()
+                                    
+                                    # 构建命令字符串
+                                    encode_params = f'"{self.encode_params_var.get()}"'
+                                    
+                                    # 构建基础命令，使用根据分辨率选择的切片帧数
+                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                                    
+                                    # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
+                                    secondary_fix_option = self.secondary_fix_var.get()
+                                    if secondary_fix_option == "TVAI":
+                                        # 添加TVAI相关参数
+                                        ffmpeg_path = self.ffmpeg_path_var.get()
+                                        model_name = self.tvai_model_var.get()
+                                        scale = self.tvai_scale_var.get()
+                                        threads = self.tvai_threads_var.get()
+                                        tvai_params = self.tvai_params_var.get()
+                                        
+                                        # 处理TVAI缩放参数的特殊转换规则
+                                        if scale == "1":
+                                            tvai_scale = "0"
+                                        else:
+                                            tvai_scale = scale
+                                        
+                                        cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
+                                    elif secondary_fix_option == "Swin2SR":
+                                        # 添加Swin2SR相关参数
+                                        batch_size = self.swin2sr_batch_size_var.get()
+                                        cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
+                                    
+                                    self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
+                                    self.logger.info(f"完整命令: {cmd}")
+                                    self.logger.info(f"工作目录: {jasna_dir}")
+                                    self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time_for_model_compile}")
+                                    
+                                    # 重置进度记录
+                                    self.progress_records = []
+                                    self.last_progress_time = time.time()
+                                    self.last_progress_value = 0
+                                    self.progress_output_lines = []
+                                    
+                                    # 启动子进程 - 在jasna目录中执行命令
+                                    process = subprocess.Popen(
+                                        cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT,  # 合并stderr到stdout
+                                        universal_newlines=True,
+                                        shell=True,
+                                        cwd=jasna_dir,
+                                        bufsize=1  # 行缓冲
+                                    )
+                                    
+                                    # 保存当前进程引用，用于停止功能
+                                    self.current_process = process
+                                    
+                                    # 启动输出监控线程
+                                    output_thread = threading.Thread(
+                                        target=self.monitor_jasna_output,
+                                        args=(process, transcoded_video_name)
+                                    )
+                                    output_thread.daemon = True
+                                    output_thread.start()
+                                    
+                                    # 等待进程完成
+                                    return_code = process.wait()
+                                    
+                                    # 等待输出线程结束
+                                    output_thread.join(timeout=5)
+                                    
+                                    # 停止卡死监测线程
+                                    self.stop_stuck_monitor()
+                                    
+                                    # 清除当前进程引用
+                                    self.current_process = None
+                                    
+                                    # 检查是否因卡死而终止
+                                    if self.stuck_detected:
+                                        self.logger.warning(f"检测到视频卡死，已终止处理: {transcoded_video_name}")
+                                        
+                                        # 如果是首次使用当前切片帧数且发生卡死（模型编译失败），弹窗提示错误
+                                        if is_first_time_for_model_compile:
+                                            self.root.after(0, lambda: self.show_custom_messagebox("error", "错误", "模型编译失败，请检查系统设置、内存大小、显存大小，可适当调低切片帧数后重新运行"))
+                                            
+                                            # 立即恢复原始的stuck_seconds值，因为模型编译失败，不需要将切片帧数添加到历史记录
+                                            if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                                self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                                self.stuck_seconds_modified = False
+                                                self.logger.info(f"模型编译失败 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                            
+                                            # 不将当前切片帧数添加到历史记录，直接跳出整个处理循环
+                                            break  # 终止所有后续视频处理任务
+                                        
+                                        # 执行卡死处理流程
+                                        self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder)
+                                        
+                                        # 重置当前处理视频
+                                        self.currently_processing = None
+                                        self.current_video_var.set("无")
+                                        self.processing_mode_var.set("破解")  # 重置为默认破解模式
+                                        
+                                        # 重置进度条
+                                        self.root.after(0, self.reset_progress_display)
+                                        
+                                        # 清空日志文件
+                                        self.clear_log_file()
+                                        
+                                        # 重要修复：跳过当前卡死视频，继续处理下一个视频
+                                        # 不需要执行后续的成功/失败检查，直接continue到下一个循环
+                                        # 重置停止标志，以便继续处理下一个视频
+                                        self.stop_processing = False
+                                        continue
+                                    
+                                    # 检查进程是否成功完成
+                                    if return_code == 0 and not self.stop_processing:
+                                        # 处理成功
+                                        # 检查最终文件是否存在
+                                        success = self.check_final_file_exists(transcoded_video_name_only, suffix, output_folder)
+                                        
+                                        if success:
+                                            # 计算处理速度 - 与直接处理成功的计算方式一致
+                                            # 使用总帧数除以处理时间来计算速度
+                                            processing_end_time = time.time()
+                                            processing_duration = processing_end_time - processing_start_time  # 处理该视频的总运行时间（秒）
+                                            total_frames = self.estimate_total_frames(transcoded_input_path)
+                                            if total_frames > 0 and processing_duration > 0:
+                                                processing_speed = total_frames / processing_duration
+                                                processing_speed_str = f"{int(processing_speed)}fps"
+                                            else:
+                                                processing_speed_str = "未知"
+                                            
+                                            # 将转码后的视频从未处理列表移到已处理列表
+                                            # 先找到要移除的项
+                                            item_to_remove = None
+                                            for item in self.video_lists["unprocessed"]:
+                                                if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                                   (isinstance(item, str) and item == transcoded_video_name):
+                                                    item_to_remove = item
+                                                    break
+                                            
+                                            if item_to_remove is not None:
+                                                self.video_lists["unprocessed"].remove(item_to_remove)
+                                                # 保持相同的数据结构格式，但为已处理视频添加处理速度信息
+                                                # 创建已处理视频的信息（包含处理速度）
+                                                if isinstance(item_to_remove, dict):
+                                                    processed_video_info = {
+                                                        'name': item_to_remove['name'],
+                                                        'processing_speed': processing_speed_str
+                                                    }
+                                                else:
+                                                    processed_video_info = {
+                                                        'name': transcoded_video_name,
+                                                        'processing_speed': processing_speed_str
+                                                    }
+                                                
+                                                self.video_lists["processed"].append(processed_video_info)
+                                            
+                                            # 处理成功后移动源视频到成功文件夹（新增）
+                                            success_folder = self.success_folder_var.get()
+                                            if success_folder:
+                                                success_moved = self.move_to_success_folder(transcoded_input_path, transcoded_video_name)
+                                                if success_moved:
+                                                    self.logger.info(f"成功视频已移动到成功文件夹: {transcoded_video_name}")
+                                                else:
+                                                    self.logger.warning(f"成功视频移动失败: {transcoded_video_name}")
+                                            
+                                            # 从错误列表中移除原始视频并添加到已处理列表
+                                            # 先找到要移除的原始视频项
+                                            original_item_to_remove = None
+                                            for item in self.video_lists["error"]:
+                                                if (isinstance(item, dict) and item['name'] == video_file) or \
+                                                   (isinstance(item, str) and item == video_file):
+                                                    original_item_to_remove = item
+                                                    break
+                                            
+                                            if original_item_to_remove is not None:
+                                                self.video_lists["error"].remove(original_item_to_remove)
+                                                # 创建已处理视频的信息（包含处理速度）
+                                                if isinstance(original_item_to_remove, dict):
+                                                    processed_original_video_info = {
+                                                        'name': original_item_to_remove['name'],
+                                                        'processing_speed': processing_speed_str
+                                                    }
+                                                else:
+                                                    processed_original_video_info = {
+                                                        'name': video_file,
+                                                        'processing_speed': processing_speed_str
+                                                    }
+                                                self.video_lists["processed"].append(processed_original_video_info)
+                                                
+                                                # 将原始视频从错误文件夹移动到成功文件夹
+                                                if success_folder:
+                                                    original_error_video_path = os.path.join(error_folder, video_file)
+                                                    if os.path.exists(original_error_video_path):
+                                                        # 构建成功文件夹中的目标路径
+                                                        success_original_video_path = os.path.join(success_folder, video_file)
+                                                        try:
+                                                            # 移动文件
+                                                            shutil.move(original_error_video_path, success_original_video_path)
+                                                            self.logger.info(f"原始错误视频已移动到成功文件夹: {video_file}")
+                                                        except Exception as e:
+                                                            self.logger.error(f"移动原始错误视频时出错: {str(e)}")
+                                            
+                                            # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
+                                            if is_first_time_for_model_compile:
+                                                current_detection_model = self.detection_model_var.get()
+                                                # 检查切片帧数是否已存在于历史记录中，避免重复添加
+                                                if current_slice_frames not in self.slice_frames_history:
+                                                    self.slice_frames_history.append(current_slice_frames)
+                                                    self.logger.info(f"将切片帧数 {current_slice_frames} 添加到历史记录")
+                                                # 检查检测模型是否已存在于历史记录中，避免重复添加
+                                                if current_detection_model not in self.detection_model_history:
+                                                    self.detection_model_history.append(current_detection_model)
+                                                    self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
+                                                    
+                                                # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
+                                                if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                                    self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                                    self.stuck_seconds_modified = False
+                                                    self.logger.info(f"首次运行完成 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                                
+                                                # 立即保存配置文件，确保历史记录被保存
+                                                self.save_settings()
+                                                self.logger.info("编译模式处理成功，已保存配置文件")
+                                            
+                                            # 更新GUI
+                                            self.root.after(0, self.update_lists_display)
+                                            self.root.after(0, self.update_summary)
+                                            
+                                            self.logger.info(f"转码后视频处理完成: {transcoded_video_name}")
+                                            self.root.after(0, lambda: self.status_var.set(f"转码后视频处理完成: {transcoded_video_name}"))
+                                        else:
+                                            # 最终文件不存在，视为处理失败
+                                            self.logger.error(f"转码后视频处理完成但最终文件不存在: {transcoded_video_name}")
+                                            
+                                            # 将视频从未处理列表移到错误列表
+                                            # 先找到要移除的项
+                                            item_to_remove = None
+                                            for item in self.video_lists["unprocessed"]:
+                                                if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                                   (isinstance(item, str) and item == transcoded_video_name):
+                                                    item_to_remove = item
+                                                    break
+                                            
+                                            if item_to_remove is not None:
+                                                self.video_lists["unprocessed"].remove(item_to_remove)
+                                                # 保持相同的数据结构格式
+                                                if isinstance(item_to_remove, dict):
+                                                    self.video_lists["error"].append(item_to_remove)
+                                                else:
+                                                    self.video_lists["error"].append(transcoded_video_name)
+                                            
+                                            # 删除转码后的视频文件
+                                            if os.path.exists(transcoded_input_path):
+                                                try:
+                                                    os.remove(transcoded_input_path)
+                                                    self.logger.info(f"已删除转码后的视频文件: {transcoded_video_name}")
+                                                except Exception as e:
+                                                    self.logger.error(f"删除转码后视频文件时出错: {str(e)}")
+                                            
+                                            # 更新GUI
+                                            self.root.after(0, self.update_lists_display)
+                                            self.root.after(0, self.update_summary)
+                                            
+                                            self.logger.error(f"转码后视频处理失败，最终文件未生成: {transcoded_video_name}")
+                                            self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败，最终文件未生成: {transcoded_video_name}"))
+                                    else:
+                                        # 处理失败或被停止
+                                        if self.stop_processing:
+                                            self.logger.info(f"转码后视频处理被用户停止: {transcoded_video_name}")
+                                            
+                                            # 延迟2秒后删除输出文件夹中所有该视频的临时文件（包括最终文件）
+                                            self.root.after(2000, lambda: self.cleanup_temp_files_after_stop(transcoded_video_name_only, suffix, output_folder, delete_final_file=True))
+                                            
+                                            # 如果用户停止，不清空列表，视频保留在未处理列表中
+                                            self.root.after(0, lambda: self.status_var.set(f"转码后视频处理被停止: {transcoded_video_name}"))
+                                            break  # 跳出循环，不再处理后续视频
+                                        else:
+                                            self.logger.error(f"JASNA返回错误代码: {return_code}")
+                                            
+                                            # 清理可能生成的临时文件（包括最终文件）
+                                            self.cleanup_temp_files(transcoded_video_name_only, suffix, output_folder, delete_final_file=True)
+                                            
+                                            # 将视频从未处理列表移到错误列表
+                                            # 先找到要移除的项
+                                            item_to_remove = None
+                                            for item in self.video_lists["unprocessed"]:
+                                                if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                                   (isinstance(item, str) and item == transcoded_video_name):
+                                                    item_to_remove = item
+                                                    break
+                                            
+                                            if item_to_remove is not None:
+                                                self.video_lists["unprocessed"].remove(item_to_remove)
+                                                # 保持相同的数据结构格式
+                                                if isinstance(item_to_remove, dict):
+                                                    self.video_lists["error"].append(item_to_remove)
+                                                else:
+                                                    self.video_lists["error"].append(transcoded_video_name)
+                                            
+                                            # 删除转码后的视频文件
+                                            if os.path.exists(transcoded_input_path):
+                                                try:
+                                                    os.remove(transcoded_input_path)
+                                                    self.logger.info(f"已删除转码后的视频文件: {transcoded_video_name}")
+                                                except Exception as e:
+                                                    self.logger.error(f"删除转码后视频文件时出错: {str(e)}")
+                                            
+                                            # 更新GUI
+                                            self.root.after(0, self.update_lists_display)
+                                            self.root.after(0, self.update_summary)
+                                            
+                                            self.logger.error(f"转码后视频处理失败: {transcoded_video_name}")
+                                            self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败: {transcoded_video_name}"))
+                                else:
+                                    self.logger.error(f"转码失败: {video_file}")
                 
                 # 重置当前处理视频
                 self.currently_processing = None
@@ -2521,461 +3412,19 @@ class JasnaGUI:
                 # 重置进度条
                 self.root.after(0, self.reset_progress_display)
             
-            # 所有未处理视频处理完成，开始处理错误视频的转码
-            if not self.stop_processing:
-                # 检查错误视频列表，对其中的视频进行转码
-                if len(self.video_lists["error"]) > 0:
-                    error_folder = self.error_folder_var.get()
-                    input_folder = self.input_folder_var.get()
-                    
-                    if error_folder and os.path.exists(error_folder) and input_folder and os.path.exists(input_folder):
-                        # 开始转码前，显示"转码"状态标识
-                        self.processing_mode_var.set("转码")
-                        self.processing_mode_label.place(x=450, y=5, width=50, height=30)
-                        
-                        self.logger.info("开始对错误视频进行转码...")
-                        self.root.after(0, lambda: self.status_var.set("正在对错误视频进行转码..."))
-                        
-                        # 遍历错误视频列表
-                        for error_item in self.video_lists["error"][:]:  # 使用副本遍历
-                            if self.stop_processing:
-                                break
-                                
-                            # 获取错误视频信息
-                            if isinstance(error_item, dict):
-                                error_video_file = error_item['name']
-                            else:
-                                error_video_file = error_item
-                            
-                            # 检查错误视频是否存在于错误文件夹中
-                            error_video_path = os.path.join(error_folder, error_video_file)
-                            if os.path.exists(error_video_path):
-                                self.logger.info(f"开始转码错误视频: {error_video_file}")
-                                
-                                # 设置转码状态
-                                self.root.after(0, lambda vm=error_video_file: self.current_video_var.set(vm))
-                                self.root.after(0, lambda: self.processing_mode_var.set("转码"))
-                                
-                                # 执行转码
-                                transcoded_video_name = f"{Path(error_video_file).stem}-转码{Path(error_video_file).suffix}"
-                                transcoded_video_path = os.path.join(input_folder, transcoded_video_name)
-                                
-                                transcode_success = self.transcode_video(error_video_path, transcoded_video_path)
-                                
-                                if transcode_success:
-                                    # 转码成功，将视频从错误列表移到未处理列表
-                                    self.video_lists["error"].remove(error_item)
-                                    
-                                    # 添加到未处理列表（保持相同的数据结构格式）
-                                    if isinstance(error_item, dict):
-                                        # 更新视频名称为转码后的名称
-                                        error_item['name'] = transcoded_video_name
-                                        self.video_lists["unprocessed"].append(error_item)
-                                    else:
-                                        self.video_lists["unprocessed"].append(transcoded_video_name)
-                                    
-                                    self.logger.info(f"转码成功，已将 {error_video_file} 从错误列表移到未处理列表")
-                                    
-                                    # 更新GUI
-                                    self.root.after(0, self.update_lists_display)
-                                    self.root.after(0, self.update_summary)
-                                else:
-                                    self.logger.error(f"转码失败: {error_video_file}")
+            # 检查是否还有未处理或错误的视频
+            if len(self.video_lists["unprocessed"]) == 0 and len(self.video_lists["error"]) == 0:
+                self.root.after(0, lambda: self.status_var.set("所有视频处理完成！"))
+                self.logger.info("所有视频处理完成！")
                 
-                # 对转码后的视频再次进行处理
-                if len(self.video_lists["unprocessed"]) > 0 and not self.stop_processing:
-                    self.logger.info("开始处理转码后的视频...")
-                    self.root.after(0, lambda: self.status_var.set("正在处理转码后的视频..."))
-                    
-                    # 重新处理未处理列表中的视频（包括转码后的视频）
-                    for item in self.video_lists["unprocessed"][:]:  # 使用副本遍历
-                        if self.stop_processing:
-                            break
-                        
-                        # 与之前的视频处理逻辑类似
-                        if isinstance(item, dict):
-                            video_file = item['name']
-                            video_info = item
-                        else:
-                            video_file = item
-                            video_info = None  # 旧格式，没有视频信息
-                        
-                        # 重置卡死标志
-                        self.is_stuck = False
-                        self.stuck_detected = False
-                        
-                        self.currently_processing = video_file
-                        self.current_video_var.set(video_file)
-                        self.processing_mode_var.set("破解")  # 设置为破解模式
-                        
-                        # 重置进度信息显示
-                        self.root.after(0, self.reset_progress_display)
-                        
-                        # 构建输入路径
-                        input_path = os.path.join(self.input_folder_var.get(), video_file)
-                        
-                        self.logger.info(f"构建的输入路径: {input_path}")
-                        self.logger.info(f"输入文件夹: {self.input_folder_var.get()}")
-                        self.logger.info(f"视频文件: {video_file}")
-                        self.logger.info(f"输入路径是否存在: {os.path.exists(input_path)}")
-                        
-                        # 获取视频信息
-                        self.logger.info("开始调用get_video_info函数")
-                        success = self.get_video_info(input_path)
-                        self.logger.info(f"get_video_info函数返回值: {success}")
-                        
-                        # 记录视频处理开始时间，用于计算处理速度
-                        processing_start_time = time.time()
-                        
-                        # 获取视频信息并检测分辨率
-                        video_width = self.get_video_info(input_path)
-                        is_4k_video = video_width >= 3840
-                        
-                        # 记录视频信息显示状态（无论成功与否都继续处理）
-                        self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
-                        
-                        # 根据分辨率选择切片帧数参数
-                        if is_4k_video:
-                            current_slice_frames = int(self.slice_frames_var2.get())
-                            self.logger.info(f"视频分辨率为4K及以上，使用第二个输入框的切片帧数: {current_slice_frames}")
-                        else:
-                            current_slice_frames = int(self.slice_frames_var1.get())
-                            self.logger.info(f"视频分辨率低于4K，使用第一个输入框的切片帧数: {current_slice_frames}")
-                        
-                        # 检查当前切片帧数是否已存在于历史记录中
-                        is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
-                        
-                        # 检查当前检测模型是否已存在于历史记录中
-                        current_detection_model = self.detection_model_var.get()
-                        is_detection_model_first_time = current_detection_model not in self.detection_model_history
-                        
-                        # 判断是否需要首次编译
-                        is_first_time_for_model_compile = False  # 标记是否是模型编译的首次运行
-                        if is_slice_frames_first_time or is_detection_model_first_time:
-                            # 弹窗提示用户
-                            self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数或检测模型为首次使用\n需要编译模型 \n\n所需时间为0.2小时到4小时之间"))
-                            # 临时将卡死超时时间设置为15000秒
-                            self.stuck_seconds_var.set("15000")
-                            self.stuck_seconds_modified = True  # 标记stuck_seconds值已被修改
-                            is_first_time_for_model_compile = True  # 标记本次处理是首次模型编译
-                        
-                        # 记录检查结果
-                        self.logger.info(f"双重检查结果 - 切片帧数首次使用: {is_slice_frames_first_time}, 检测模型首次使用: {is_detection_model_first_time}")
-                        
-                        # 构建输出文件名（添加后缀和.mp4扩展名）
-                        video_name = Path(video_file).stem
-                        suffix = self.output_suffix_var.get()
-                        final_output_filename = f"{video_name}{suffix}.mp4"
-                        final_output_path = os.path.join(output_folder, final_output_filename)
-                        
-                        # 启动卡死监测线程（根据是否首次使用设置不同的阈值）
-                        if is_first_time_for_model_compile:
-                            self.start_stuck_monitor(custom_stuck_seconds=15000)
-                        else:
-                            self.start_stuck_monitor()
-                        
-                        # 构建命令字符串
-                        encode_params = f'"{self.encode_params_var.get()}"'
-                        
-                        # 构建基础命令，使用根据分辨率选择的切片帧数
-                        cmd = f'.\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
-                        
-                        # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
-                        secondary_fix_option = self.secondary_fix_var.get()
-                        if secondary_fix_option == "TVAI":
-                            # 添加TVAI相关参数
-                            ffmpeg_path = self.ffmpeg_path_var.get()
-                            model_name = self.tvai_model_var.get()
-                            scale = self.tvai_scale_var.get()
-                            threads = self.tvai_threads_var.get()
-                            tvai_params = self.tvai_params_var.get()
-                            
-                            # 处理TVAI缩放参数的特殊转换规则
-                            if scale == "1":
-                                tvai_scale = "0"
-                            else:
-                                tvai_scale = scale
-                            
-                            cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
-                        elif secondary_fix_option == "Swin2SR":
-                            # 添加Swin2SR相关参数
-                            batch_size = self.swin2sr_batch_size_var.get()
-                            cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
-                        
-                        self.logger.info(f"开始处理视频: {video_file}")
-                        self.logger.info(f"完整命令: {cmd}")
-                        self.logger.info(f"工作目录: {jasna_dir}")
-                        self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time_for_model_compile}")
-                        
-                        # 重置进度记录
-                        self.progress_records = []
-                        self.last_progress_time = time.time()
-                        self.last_progress_value = 0
-                        self.progress_output_lines = []
-                        
-                        # 启动子进程 - 在jasna目录中执行命令
-                        process = subprocess.Popen(
-                            cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,  # 合并stderr到stdout
-                            universal_newlines=True,
-                            shell=True,
-                            cwd=jasna_dir,
-                            bufsize=1  # 行缓冲
-                        )
-                        
-                        # 保存当前进程引用，用于停止功能
-                        self.current_process = process
-                        
-                        # 启动输出监控线程
-                        output_thread = threading.Thread(
-                            target=self.monitor_jasna_output,
-                            args=(process, video_file)
-                        )
-                        output_thread.daemon = True
-                        output_thread.start()
-                        
-                        # 等待进程完成
-                        return_code = process.wait()
-                        
-                        # 等待输出线程结束
-                        output_thread.join(timeout=5)
-                        
-                        # 停止卡死监测线程
-                        self.stop_stuck_monitor()
-                        
-                        # 清除当前进程引用
-                        self.current_process = None
-                        
-                        # 检查是否因卡死而终止
-                        if self.stuck_detected:
-                            self.logger.warning(f"检测到视频卡死，已终止处理: {video_file}")
-                            
-                            # 如果是首次使用当前切片帧数且发生卡死（模型编译失败），弹窗提示错误
-                            if is_first_time_for_model_compile:
-                                self.root.after(0, lambda: self.show_custom_messagebox("error", "错误", "模型编译失败，请检查系统设置、内存大小、显存大小，可适当调低切片帧数后重新运行"))
-                                
-                                # 立即恢复原始的stuck_seconds值，因为模型编译失败，不需要将切片帧数添加到历史记录
-                                if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
-                                    self.stuck_seconds_var.set(self.original_stuck_seconds)
-                                    self.stuck_seconds_modified = False
-                                    self.logger.info(f"模型编译失败 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
-                                
-                                # 不将当前切片帧数添加到历史记录，直接跳出整个处理循环
-                                break  # 终止所有后续视频处理任务
-                            
-                            # 执行卡死处理流程
-                            self.handle_stuck_video(video_file, input_path, video_name, suffix, output_folder)
-                            
-                            # 重置当前处理视频
-                            self.currently_processing = None
-                            self.current_video_var.set("无")
-                            self.processing_mode_var.set("破解")  # 重置为默认破解模式
-                            
-                            # 重置进度条
-                            self.root.after(0, self.reset_progress_display)
-                            
-                            # 清空日志文件
-                            self.clear_log_file()
-                            
-                            # 重要修复：跳过当前卡死视频，继续处理下一个视频
-                            # 不需要执行后续的成功/失败检查，直接continue到下一个循环
-                            # 重置停止标志，以便继续处理下一个视频
-                            self.stop_processing = False
-                            continue
-                        
-                        # 检查进程是否成功完成
-                        if return_code == 0 and not self.stop_processing:
-                            # 处理成功
-                            # 检查最终文件是否存在
-                            success = self.check_final_file_exists(video_name, suffix, output_folder)
-                            
-                            if success:
-                                # 根据数据结构类型进行相应处理
-                                # 先找到要移除的项
-                                item_to_remove = None
-                                for item in self.video_lists["unprocessed"]:
-                                    if (isinstance(item, dict) and item['name'] == video_file) or \
-                                       (isinstance(item, str) and item == video_file):
-                                        item_to_remove = item
-                                        break
-                                
-                                if item_to_remove is not None:
-                                    self.video_lists["unprocessed"].remove(item_to_remove)
-                                    # 保持相同的数据结构格式，但为已处理视频添加处理速度信息
-                                    processing_end_time = time.time()
-                                    processing_duration = processing_end_time - processing_start_time  # 处理该视频的总运行时间（秒）
-                                    
-                                    # 获取视频原始时长（秒）
-                                    video_duration_seconds = 0
-                                    if isinstance(item_to_remove, dict):
-                                        # 尝试解析时长格式 HH:MM:SS 或 MM:SS
-                                        duration_str = item_to_remove['duration']
-                                        if duration_str != "未知":
-                                            try:
-                                                time_parts = duration_str.split(':')
-                                                if len(time_parts) == 3:  # HH:MM:SS
-                                                    hours, minutes, seconds = map(int, time_parts)
-                                                    video_duration_seconds = hours * 3600 + minutes * 60 + seconds
-                                                elif len(time_parts) == 2:  # MM:SS
-                                                    minutes, seconds = map(int, time_parts)
-                                                    video_duration_seconds = minutes * 60 + seconds
-                                            except:
-                                                video_duration_seconds = 0
-                                    
-                                    # 计算处理速度
-                                    if video_duration_seconds > 0:
-                                        processing_speed = processing_duration / video_duration_seconds
-                                        # 保留最多三位数字
-                                        processing_speed_str = self.format_to_three_digits(processing_speed)
-                                    else:
-                                        processing_speed_str = "未知"
-                                    
-                                    # 创建已处理视频的信息（包含处理速度）
-                                    if isinstance(item_to_remove, dict):
-                                        processed_video_info = {
-                                            'name': item_to_remove['name'],
-                                            'processing_speed': processing_speed_str
-                                        }
-                                    else:
-                                        processed_video_info = {
-                                            'name': video_file,
-                                            'processing_speed': processing_speed_str
-                                        }
-                                    
-                                    self.video_lists["processed"].append(processed_video_info)
-                                
-                                # 更新GUI
-                                self.root.after(0, self.update_lists_display)
-                                self.root.after(0, self.update_summary)
-                                
-                                # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
-                                if is_first_time_for_model_compile:
-                                    current_slice_frames = int(self.slice_frames_var1.get())
-                                    current_detection_model = self.detection_model_var.get()
-                                    # 检查切片帧数是否已存在于历史记录中，避免重复添加
-                                    if current_slice_frames not in self.slice_frames_history:
-                                        self.slice_frames_history.append(current_slice_frames)
-                                        self.logger.info(f"将切片帧数 {current_slice_frames} 添加到历史记录")
-                                    # 检查检测模型是否已存在于历史记录中，避免重复添加
-                                    if current_detection_model not in self.detection_model_history:
-                                        self.detection_model_history.append(current_detection_model)
-                                        self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
-                                        
-                                        # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
-                                        if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
-                                            self.stuck_seconds_var.set(self.original_stuck_seconds)
-                                            self.stuck_seconds_modified = False
-                                            self.logger.info(f"首次运行完成 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
-                                
-                                # 处理成功后移动源视频到成功文件夹（新增）
-                                success_folder = self.success_folder_var.get()
-                                if success_folder:
-                                    success_moved = self.move_to_success_folder(input_path, video_file)
-                                    if success_moved:
-                                        self.logger.info(f"成功视频已移动到成功文件夹: {video_file}")
-                                    else:
-                                        self.logger.warning(f"成功视频移动失败: {video_file}")
-                                
-                                self.logger.info(f"视频处理完成: {video_file}")
-                                self.root.after(0, lambda: self.status_var.set(f"视频处理完成: {video_file}"))
-                            else:
-                                # 最终文件不存在，视为处理失败
-                                self.logger.error(f"视频处理完成但最终文件不存在: {video_file}")
-                                
-                                # 将视频从未处理列表移到错误列表
-                                # 先找到要移除的项
-                                item_to_remove = None
-                                for item in self.video_lists["unprocessed"]:
-                                    if (isinstance(item, dict) and item['name'] == video_file) or \
-                                       (isinstance(item, str) and item == video_file):
-                                        item_to_remove = item
-                                        break
-                                
-                                if item_to_remove is not None:
-                                    self.video_lists["unprocessed"].remove(item_to_remove)
-                                    # 保持相同的数据结构格式
-                                    if isinstance(item_to_remove, dict):
-                                        self.video_lists["error"].append(item_to_remove)
-                                    else:
-                                        self.video_lists["error"].append(video_file)
-                                
-                                # 更新GUI
-                                self.root.after(0, self.update_lists_display)
-                                self.root.after(0, self.update_summary)
-                                
-                                self.logger.error(f"视频处理失败，最终文件未生成: {video_file}")
-                                self.root.after(0, lambda: self.status_var.set(f"视频处理失败，最终文件未生成: {video_file}"))
-                        else:
-                            # 处理失败或被停止
-                            if self.stop_processing:
-                                self.logger.info(f"视频处理被用户停止: {video_file}")
-                                
-                                # 延迟2秒后删除输出文件夹中所有该视频的临时文件（包括最终文件）
-                                self.root.after(2000, lambda: self.cleanup_temp_files_after_stop(video_name, suffix, output_folder, delete_final_file=True))
-                                
-                                # 如果用户停止，不清空列表，视频保留在未处理列表中
-                                self.root.after(0, lambda: self.status_var.set(f"视频处理被停止: {video_file}"))
-                                break  # 跳出循环，不再处理后续视频
-                            else:
-                                self.logger.error(f"JASNA返回错误代码: {return_code}")
-                                
-                                # 清理可能生成的临时文件（包括最终文件）
-                                self.cleanup_temp_files(video_name, suffix, output_folder, delete_final_file=True)
-                                
-                                # 将视频从未处理列表移到错误列表
-                                # 先找到要移除的项
-                                item_to_remove = None
-                                for item in self.video_lists["unprocessed"]:
-                                    if (isinstance(item, dict) and item['name'] == video_file) or \
-                                       (isinstance(item, str) and item == video_file):
-                                        item_to_remove = item
-                                        break
-                                
-                                if item_to_remove is not None:
-                                    self.video_lists["unprocessed"].remove(item_to_remove)
-                                    # 保持相同的数据结构格式
-                                    if isinstance(item_to_remove, dict):
-                                        self.video_lists["error"].append(item_to_remove)
-                                    else:
-                                        self.video_lists["error"].append(video_file)
-                                
-                                # 更新GUI
-                                self.root.after(0, self.update_lists_display)
-                                self.root.after(0, self.update_summary)
-                                
-                                self.logger.error(f"视频处理失败: {video_file}")
-                                self.root.after(0, lambda: self.status_var.set(f"视频处理失败: {video_file}"))
-                        
-                        # 重置当前处理视频
-                        self.currently_processing = None
-                        self.current_video_var.set("无")
-                        self.processing_mode_var.set("破解")  # 重置为默认破解模式
-                        
-                        # 清空日志文件
-                        self.clear_log_file()
-                        
-                        # 重置进度条
-                        self.root.after(0, self.reset_progress_display)
+                # 保存切片帧数历史记录到配置文件
+                self.root.after(0, self.save_settings)
                 
-                # 检查是否还有未处理或错误的视频
-                if len(self.video_lists["unprocessed"]) == 0 and len(self.video_lists["error"]) == 0:
-                    self.root.after(0, lambda: self.status_var.set("所有视频处理完成！"))
-                    self.root.after(0, lambda: self.show_custom_messagebox("info", "完成", "所有视频处理完成！\n \n出错的原视频依然存在出错文件夹中，\n请自行进行处理"))
-                    self.logger.info("所有视频处理完成！")
-                    
-                    # 保存切片帧数历史记录到配置文件
-                    self.root.after(0, self.save_settings)
-                    
-                    # 根据用户选择执行相应操作
-                    self.root.after(0, self.execute_post_processing_action)
-                else:
-                    # 如果仍有视频未处理，等待用户操作
-                    self.root.after(0, lambda: self.status_var.set("转码完成，仍有视频未处理"))
-                    self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "转码未完成，仍有出错视频未转码\n文件仍然在出错视频存放文件夹中\n请自行进行处理"))
+                # 根据用户选择执行相应操作
+                self.root.after(0, self.execute_post_processing_action)
             else:
-                self.root.after(0, lambda: self.status_var.set("处理已停止"))
-                self.logger.info("处理已停止")
+                # 如果仍有视频未处理，等待用户操作
+                self.root.after(0, lambda: self.status_var.set("处理完成，仍有视频未处理"))
             
             # 只有在不是用户停止的情况下，才强制终止所有jasna.exe进程
             if not self.stop_processing:
@@ -2990,8 +3439,9 @@ class JasnaGUI:
             self.root.after(0, self.hide_processing_mode_indicator)
             
         except Exception as e:
-            self.logger.error(f"处理视频时出错: {str(e)}", exc_info=True)
-            self.root.after(0, lambda: self.show_custom_messagebox("error", "错误", f"处理视频时出错: {str(e)}"))
+            error_message = str(e)
+            self.logger.error(f"处理视频时出错: {error_message}", exc_info=True)
+            self.root.after(0, lambda msg=error_message: self.show_custom_messagebox("error", "错误", f"处理视频时出错: {msg}"))
         finally:
             # 确保卡死监测线程停止
             self.stop_stuck_monitor()
@@ -3094,12 +3544,436 @@ class JasnaGUI:
                 else:
                     self.logger.warning(f"卡死视频移动失败: {video_file}")
                     self.root.after(0, lambda: self.status_var.set(f"视频卡死但移动失败: {video_file}"))
+                    return  # 移动失败，无法继续转码
             else:
                 self.logger.info(f"未设置出错文件夹，卡死视频保持在原位置: {video_file}")
                 self.root.after(0, lambda: self.status_var.set(f"视频卡死，未设置出错文件夹，视频保持在原位置: {video_file}"))
+                return  # 未设置出错文件夹，无法继续转码
             
-            # 5. 主程序进入下一个循环，继续处理下一个视频
-            # (这个在process_videos函数中会自动继续下一个循环)
+            # 5. 立即对卡死视频执行转码并再次处理
+            # 这部分逻辑与正常出错时的处理流程一致
+            if error_folder and os.path.exists(error_folder):
+                error_video_path = os.path.join(error_folder, video_file)
+                if os.path.exists(error_video_path):
+                    # 检查是否用户请求停止处理
+                    if self.stop_processing:
+                        self.logger.info("用户请求停止转码")
+                        return
+                    
+                    self.logger.info(f"开始转码卡死视频: {video_file}")
+                    
+                    # 设置转码状态
+                    self.root.after(0, lambda vm=video_file: self.current_video_var.set(vm))
+                    self.root.after(0, lambda: self.processing_mode_var.set("转码"))
+                    
+                    # 执行转码
+                    transcoded_video_name = f"{Path(video_file).stem}-转码{Path(video_file).suffix}"
+                    transcoded_video_path = os.path.join(self.input_folder_var.get(), transcoded_video_name)
+                    
+                    transcode_success = self.transcode_video(error_video_path, transcoded_video_path)
+                    
+                    if transcode_success:
+                        # 转码成功，立即对转码后的视频再次执行处理操作
+                        self.logger.info(f"转码成功，开始再次处理转码后的视频: {transcoded_video_name}")
+                        
+                        # 重置卡死标志
+                        self.is_stuck = False
+                        self.stuck_detected = False
+                        
+                        # 重置处理错误标志
+                        self.processing_error = False
+                        
+                        self.currently_processing = transcoded_video_name
+                        self.current_video_var.set(transcoded_video_name)
+                        self.processing_mode_var.set("破解")  # 设置为破解模式
+                        
+                        # 重置进度信息显示
+                        self.root.after(0, self.reset_progress_display)
+                        
+                        # 构建输入路径
+                        transcoded_input_path = os.path.join(self.input_folder_var.get(), transcoded_video_name)
+                        
+                        self.logger.info(f"构建的转码后视频输入路径: {transcoded_input_path}")
+                        self.logger.info(f"输入文件夹: {self.input_folder_var.get()}")
+                        self.logger.info(f"转码后视频文件: {transcoded_video_name}")
+                        self.logger.info(f"输入路径是否存在: {os.path.exists(transcoded_input_path)}")
+                        
+                        # 获取视频信息
+                        self.logger.info("开始调用get_video_info函数")
+                        success = self.get_video_info(transcoded_input_path)
+                        self.logger.info(f"get_video_info函数返回值: {success}")
+                        
+                        # 记录视频处理开始时间，用于计算处理速度
+                        processing_start_time = time.time()
+                        
+                        # 获取视频信息并检测分辨率
+                        video_width = self.get_video_info(transcoded_input_path)
+                        is_4k_video = video_width >= 3840
+                        
+                        # 记录视频信息显示状态（无论成功与否都继续处理）
+                        self.root.after(0, lambda: self.logger.info(f"视频信息显示状态 - 分辨率: {self.video_resolution_var.get()}, 帧率: {self.video_fps_var.get()}, 时长: {self.video_duration_var.get()}"))
+                        
+                        # 根据分辨率选择切片帧数参数
+                        if is_4k_video:
+                            current_slice_frames = int(self.slice_frames_var2.get())
+                            self.logger.info(f"视频分辨率为4K及以上，使用第二个输入框的切片帧数: {current_slice_frames}")
+                        else:
+                            current_slice_frames = int(self.slice_frames_var1.get())
+                            self.logger.info(f"视频分辨率低于4K，使用第一个输入框的切片帧数: {current_slice_frames}")
+                        
+                        # 检查当前切片帧数是否已存在于历史记录中
+                        is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
+                        
+                        # 检查当前检测模型是否已存在于历史记录中
+                        current_detection_model = self.detection_model_var.get()
+                        is_detection_model_first_time = current_detection_model not in self.detection_model_history
+                        
+                        # 判断是否需要首次编译
+                        is_first_time_for_model_compile = False  # 标记是否是模型编译的首次运行
+                        if is_slice_frames_first_time or is_detection_model_first_time:
+                            # 弹窗提示用户
+                            self.root.after(0, lambda: self.show_custom_messagebox("info", "提示", "当前切片帧数或检测模型为首次使用\n需要编译模型 \n\n所需时间为0.2小时到4小时之间"))
+                            # 临时将卡死超时时间设置为15000秒
+                            self.stuck_seconds_var.set("15000")
+                            self.stuck_seconds_modified = True  # 标记stuck_seconds值已被修改
+                            is_first_time_for_model_compile = True  # 标记本次处理是首次模型编译
+                        
+                        # 记录检查结果
+                        self.logger.info(f"双重检查结果 - 切片帧数首次使用: {is_slice_frames_first_time}, 检测模型首次使用: {is_detection_model_first_time}")
+                        
+                        # 构建输出文件名（添加后缀和.mp4扩展名）
+                        transcoded_video_name_only = Path(transcoded_video_name).stem
+                        suffix = self.output_suffix_var.get()
+                        final_output_filename = f"{transcoded_video_name_only}{suffix}.mp4"
+                        final_output_path = os.path.join(output_folder, final_output_filename)
+                        
+                        # 启动卡死监测线程（根据是否首次使用设置不同的阈值）
+                        if is_first_time_for_model_compile:
+                            self.start_stuck_monitor(custom_stuck_seconds=15000)
+                        else:
+                            self.start_stuck_monitor()
+                        
+                        # 构建命令字符串
+                        encode_params = f'"{self.encode_params_var.get()}"'
+                        
+                        # 构建基础命令，使用根据分辨率选择的切片帧数
+                        # 获取JASNA程序地址，与第一次处理视频时的方式一致
+                        jasna_path = self.jasna_path_var.get()
+                        jasna_dir = os.path.dirname(jasna_path)
+                        jasna_exe_name = os.path.basename(jasna_path)
+                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                        
+                        # 确保JASNA目录存在
+                        if not os.path.exists(jasna_dir):
+                            self.logger.error(f"JASNA目录不存在: {jasna_dir}")
+                            return
+                        
+                        # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
+                        secondary_fix_option = self.secondary_fix_var.get()
+                        if secondary_fix_option == "TVAI":
+                            # 添加TVAI相关参数
+                            ffmpeg_path = self.ffmpeg_path_var.get()
+                            model_name = self.tvai_model_var.get()
+                            scale = self.tvai_scale_var.get()
+                            threads = self.tvai_threads_var.get()
+                            tvai_params = self.tvai_params_var.get()
+                            
+                            # 处理TVAI缩放参数的特殊转换规则
+                            if scale == "1":
+                                tvai_scale = "0"
+                            else:
+                                tvai_scale = scale
+                            
+                            cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
+                        elif secondary_fix_option == "Swin2SR":
+                            # 添加Swin2SR相关参数
+                            batch_size = self.swin2sr_batch_size_var.get()
+                            cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
+                        
+                        self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
+                        self.logger.info(f"完整命令: {cmd}")
+                        self.logger.info(f"工作目录: {jasna_dir}")
+                        self.logger.info(f"当前切片帧数: {current_slice_frames}, 是否首次使用: {is_first_time_for_model_compile}")
+                        
+                        # 重置进度记录
+                        self.progress_records = []
+                        self.last_progress_time = time.time()
+                        self.last_progress_value = 0
+                        self.progress_output_lines = []
+                        
+                        # 启动子进程 - 在jasna目录中执行命令
+                        process = subprocess.Popen(
+                            cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,  # 合并stderr到stdout
+                            universal_newlines=True,
+                            shell=True,
+                            cwd=jasna_dir,
+                            bufsize=1  # 行缓冲
+                        )
+                        
+                        # 保存当前进程引用，用于停止功能
+                        self.current_process = process
+                        
+                        # 启动输出监控线程
+                        output_thread = threading.Thread(
+                            target=self.monitor_jasna_output,
+                            args=(process, transcoded_video_name)
+                        )
+                        output_thread.daemon = True
+                        output_thread.start()
+                        
+                        # 等待进程完成
+                        return_code = process.wait()
+                        
+                        # 等待输出线程结束
+                        output_thread.join(timeout=5)
+                        
+                        # 停止卡死监测线程
+                        self.stop_stuck_monitor()
+                        
+                        # 清除当前进程引用
+                        self.current_process = None
+                        
+                        # 检查是否因卡死而终止
+                        if self.stuck_detected:
+                            self.logger.warning(f"检测到转码后视频卡死，已终止处理: {transcoded_video_name}")
+                            
+                            # 如果是首次使用当前切片帧数且发生卡死（模型编译失败），弹窗提示错误
+                            if is_first_time_for_model_compile:
+                                self.root.after(0, lambda: self.show_custom_messagebox("error", "错误", "模型编译失败，请检查系统设置、内存大小、显存大小，可适当调低切片帧数后重新运行"))
+                                
+                                # 立即恢复原始的stuck_seconds值，因为模型编译失败，不需要将切片帧数添加到历史记录
+                                if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                    self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                    self.stuck_seconds_modified = False
+                                    self.logger.info(f"模型编译失败 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                
+                                # 不将当前切片帧数添加到历史记录，直接跳出
+                                return
+                            
+                            # 执行卡死处理流程
+                            self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder)
+                            
+                            # 重置当前处理视频
+                            self.currently_processing = None
+                            self.current_video_var.set("无")
+                            self.processing_mode_var.set("破解")  # 重置为默认破解模式
+                            
+                            # 重置进度条
+                            self.root.after(0, self.reset_progress_display)
+                            
+                            # 清空日志文件
+                            self.clear_log_file()
+                            
+                            return
+                        
+                        # 检查进程是否成功完成
+                        if return_code == 0 and not self.stop_processing:
+                            # 处理成功
+                            # 检查最终文件是否存在
+                            success = self.check_final_file_exists(transcoded_video_name_only, suffix, output_folder)
+                            
+                            if success:
+                                # 初始化处理速度变量
+                                processing_speed_str = "未知"
+                                
+                                # 计算处理速度 - 与直接处理成功的计算方式一致
+                                processing_end_time = time.time()
+                                processing_duration = processing_end_time - processing_start_time  # 处理该视频的总运行时间（秒）
+                                
+                                # 使用总帧数除以处理时间来计算速度
+                                total_frames = self.estimate_total_frames(transcoded_input_path)
+                                if total_frames > 0 and processing_duration > 0:
+                                    processing_speed = total_frames / processing_duration
+                                    processing_speed_str = f"{int(processing_speed)}fps"
+                                else:
+                                    processing_speed_str = "未知"
+                                
+                                # 将转码后的视频从未处理列表移到已处理列表
+                                # 先找到要移除的项
+                                item_to_remove = None
+                                for item in self.video_lists["unprocessed"]:
+                                    if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                       (isinstance(item, str) and item == transcoded_video_name):
+                                        item_to_remove = item
+                                        break
+                                
+                                if item_to_remove is not None:
+                                    self.video_lists["unprocessed"].remove(item_to_remove)
+                                    # 保持相同的数据结构格式，但为已处理视频添加处理速度信息
+                                    if isinstance(item_to_remove, dict):
+                                        processed_video_info = {
+                                            'name': item_to_remove['name'],
+                                            'processing_speed': processing_speed_str
+                                        }
+                                    else:
+                                        processed_video_info = {
+                                            'name': transcoded_video_name,
+                                            'processing_speed': processing_speed_str
+                                        }
+                                    
+                                    self.video_lists["processed"].append(processed_video_info)
+                                
+                                # 从错误列表中移除原始视频并添加到已处理列表
+                                # 先找到要移除的原始视频项
+                                original_item_to_remove = None
+                                for item in self.video_lists["error"]:
+                                    if (isinstance(item, dict) and item['name'] == video_file) or \
+                                       (isinstance(item, str) and item == video_file):
+                                        original_item_to_remove = item
+                                        break
+                                
+                                if original_item_to_remove is not None:
+                                    self.video_lists["error"].remove(original_item_to_remove)
+                                    # 创建已处理视频的信息（包含处理速度）
+                                    if isinstance(original_item_to_remove, dict):
+                                        processed_original_video_info = {
+                                            'name': original_item_to_remove['name'],
+                                            'processing_speed': processing_speed_str
+                                        }
+                                    else:
+                                        processed_original_video_info = {
+                                            'name': video_file,
+                                            'processing_speed': processing_speed_str
+                                        }
+                                    self.video_lists["processed"].append(processed_original_video_info)
+                                    
+                                    # 将原始视频从错误文件夹移动到成功文件夹
+                                    success_folder = self.success_folder_var.get()
+                                    if success_folder:
+                                        original_error_video_path = os.path.join(error_folder, video_file)
+                                        if os.path.exists(original_error_video_path):
+                                            # 构建成功文件夹中的目标路径
+                                            success_original_video_path = os.path.join(success_folder, video_file)
+                                            try:
+                                                # 移动文件
+                                                shutil.move(original_error_video_path, success_original_video_path)
+                                                self.logger.info(f"原始错误视频已移动到成功文件夹: {video_file}")
+                                            except Exception as e:
+                                                self.logger.error(f"移动原始错误视频时出错: {str(e)}")
+                                
+                                # 处理成功后移动转码后的视频到成功文件夹
+                                success_folder = self.success_folder_var.get()
+                                if success_folder:
+                                    success_moved = self.move_to_success_folder(transcoded_input_path, transcoded_video_name)
+                                    if success_moved:
+                                        self.logger.info(f"成功视频已移动到成功文件夹: {transcoded_video_name}")
+                                    else:
+                                        self.logger.warning(f"成功视频移动失败: {transcoded_video_name}")
+                                
+                                # 更新GUI
+                                self.root.after(0, self.update_lists_display)
+                                self.root.after(0, self.update_summary)
+                                
+                                # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
+                                if is_first_time_for_model_compile:
+                                    current_detection_model = self.detection_model_var.get()
+                                    # 检查切片帧数是否已存在于历史记录中，避免重复添加
+                                    if current_slice_frames not in self.slice_frames_history:
+                                        self.slice_frames_history.append(current_slice_frames)
+                                        self.logger.info(f"将切片帧数 {current_slice_frames} 添加到历史记录")
+                                    # 检查检测模型是否已存在于历史记录中，避免重复添加
+                                    if current_detection_model not in self.detection_model_history:
+                                        self.detection_model_history.append(current_detection_model)
+                                        self.logger.info(f"将检测模型 {current_detection_model} 添加到历史记录")
+                                    
+                                    # 立即恢复原始的stuck_seconds值，避免后续视频处理受到影响
+                                    if self.stuck_seconds_modified and self.original_stuck_seconds is not None:
+                                        self.stuck_seconds_var.set(self.original_stuck_seconds)
+                                        self.stuck_seconds_modified = False
+                                        self.logger.info(f"首次运行完成 - 恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
+                                    
+                                    # 立即保存配置文件，确保历史记录被保存
+                                    self.save_settings()
+                                    self.logger.info("编译模式处理成功，已保存配置文件")
+                                
+                                self.logger.info(f"转码后视频处理完成: {transcoded_video_name}")
+                                self.root.after(0, lambda: self.status_var.set(f"转码后视频处理完成: {transcoded_video_name}"))
+                            else:
+                                # 最终文件不存在，视为处理失败
+                                self.logger.error(f"转码后视频处理完成但最终文件不存在: {transcoded_video_name}")
+                                
+                                # 将视频从未处理列表移到错误列表
+                                # 先找到要移除的项
+                                item_to_remove = None
+                                for item in self.video_lists["unprocessed"]:
+                                    if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                       (isinstance(item, str) and item == transcoded_video_name):
+                                        item_to_remove = item
+                                        break
+                                
+                                if item_to_remove is not None:
+                                    self.video_lists["unprocessed"].remove(item_to_remove)
+                                    # 保持相同的数据结构格式
+                                    if isinstance(item_to_remove, dict):
+                                        self.video_lists["error"].append(item_to_remove)
+                                    else:
+                                        self.video_lists["error"].append(transcoded_video_name)
+                                
+                                # 删除转码后的视频文件
+                                if os.path.exists(transcoded_input_path):
+                                    try:
+                                        os.remove(transcoded_input_path)
+                                        self.logger.info(f"已删除转码后的视频文件: {transcoded_video_name}")
+                                    except Exception as e:
+                                        self.logger.error(f"删除转码后视频文件时出错: {str(e)}")
+                                
+                                # 更新GUI
+                                self.root.after(0, self.update_lists_display)
+                                self.root.after(0, self.update_summary)
+                                
+                                self.logger.error(f"转码后视频处理失败，最终文件未生成: {transcoded_video_name}")
+                                self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败，最终文件未生成: {transcoded_video_name}"))
+                        else:
+                            # 处理失败或被停止
+                            if self.stop_processing:
+                                self.logger.info(f"转码后视频处理被用户停止: {transcoded_video_name}")
+                                
+                                # 延迟2秒后删除输出文件夹中所有该视频的临时文件（包括最终文件）
+                                self.root.after(2000, lambda: self.cleanup_temp_files_after_stop(transcoded_video_name_only, suffix, output_folder, delete_final_file=True))
+                                
+                                # 如果用户停止，不清空列表，视频保留在未处理列表中
+                                self.root.after(0, lambda: self.status_var.set(f"转码后视频处理被停止: {transcoded_video_name}"))
+                            else:
+                                self.logger.error(f"JASNA返回错误代码: {return_code}")
+                                
+                                # 清理可能生成的临时文件（包括最终文件）
+                                self.cleanup_temp_files(transcoded_video_name_only, suffix, output_folder, delete_final_file=True)
+                                
+                                # 将视频从未处理列表移到错误列表
+                                # 先找到要移除的项
+                                item_to_remove = None
+                                for item in self.video_lists["unprocessed"]:
+                                    if (isinstance(item, dict) and item['name'] == transcoded_video_name) or \
+                                       (isinstance(item, str) and item == transcoded_video_name):
+                                        item_to_remove = item
+                                        break
+                                
+                                if item_to_remove is not None:
+                                    self.video_lists["unprocessed"].remove(item_to_remove)
+                                    # 保持相同的数据结构格式
+                                    if isinstance(item_to_remove, dict):
+                                        self.video_lists["error"].append(item_to_remove)
+                                    else:
+                                        self.video_lists["error"].append(transcoded_video_name)
+                                
+                                # 删除转码后的视频文件
+                                if os.path.exists(transcoded_input_path):
+                                    try:
+                                        os.remove(transcoded_input_path)
+                                        self.logger.info(f"已删除转码后的视频文件: {transcoded_video_name}")
+                                    except Exception as e:
+                                        self.logger.error(f"删除转码后视频文件时出错: {str(e)}")
+                                
+                                # 更新GUI
+                                self.root.after(0, self.update_lists_display)
+                                self.root.after(0, self.update_summary)
+                                
+                                self.logger.error(f"转码后视频处理失败: {transcoded_video_name}")
+                                self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败: {transcoded_video_name}"))
+                    else:
+                        self.logger.error(f"转码失败: {video_file}")
             
             self.logger.info(f"卡死视频处理完成: {video_file}")
             
