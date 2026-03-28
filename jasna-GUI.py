@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v5.6.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
+        self.root.title("JASNA视频处理工具-v5.6.2  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
         self.root.geometry("1170x1005")  # 窗口高度增加15像素
         
         # 设置窗口图标
