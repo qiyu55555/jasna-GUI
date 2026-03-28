@@ -335,8 +335,8 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v5.3  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：767031656")
-        self.root.geometry("1170x1040")
+        self.root.title("JASNA视频处理工具-v5.6.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
+        self.root.geometry("1170x1005")  # 窗口高度增加15像素
         
         # 设置窗口图标
         try:
@@ -405,14 +405,19 @@ class JasnaGUI:
         self.post_processing_action_var = tk.StringVar(value="无")  # 默认为"无"
         
         # 二次修复相关变量
-        self.secondary_fix_var = tk.StringVar(value="无")  # 二次修复选项：无、TVAI、Swin2SR
+        self.secondary_fix_var = tk.StringVar(value="无")  # 二次修复选项：无、TVAI、RTX-SR
         self.ffmpeg_path_var = tk.StringVar()  # ffmpeg程序地址
         self.tvai_model_var = tk.StringVar(value="iris-2")  # TVAI模型名称
         self.tvai_scale_var = tk.StringVar(value="4")  # TVAI缩放选项
         self.tvai_threads_var = tk.StringVar(value="2")  # TVAI线程数
         self.tvai_params_var = tk.StringVar(value="preblur=0:noise=0:details=0:halo=0:blur=0:compression=0:estimate=8:blend=0.2:device=-2:vram=1:instances=1")  # TVAI附加参数
-        self.swin2sr_batch_size_var = tk.StringVar(value="8")  # Swin2SR批量大小
+        # RTX-SR相关参数
+        self.rtx_sr_scale_var = tk.StringVar(value="4X")  # RTX-SR缩放：2X、4X，默认4X
+        self.rtx_sr_quality_var = tk.StringVar(value="高")  # RTX-SR质量：低、中、高、超高，默认高
+        self.rtx_sr_denoise_var = tk.StringVar(value="低")  # RTX-SR降噪：无、低、中、高、超高，默认低
+        self.rtx_sr_deblur_var = tk.StringVar(value="低")  # RTX-SR去模糊：无、低、中、高、超高，默认低
         self.secondary_fix_display_var = tk.StringVar()  # 二次修复显示/隐藏选项
+        self.settings_mode_var = tk.StringVar(value="二次修复")  # 设置模式：二次修复、全部设置
         
         # 视频转码参数
         self.transcode_params_var = tk.StringVar(value='-hwaccel cuda -hwaccel_output_format cuda -c:v hevc_nvenc -preset p5 -tune hq -rc constqp -qp 15 -qp_cb_offset -2 -qp_cr_offset -2 -spatial_aq 1 -aq-strength 1 -c:a aac -b:a 128k')
@@ -441,18 +446,11 @@ class JasnaGUI:
         # 加载上次的设置
         self.load_settings()
         
-        # 根据加载的"二次修复"值动态调整UI布局
-        secondary_fix_display = self.secondary_fix_display_var.get()
-        if secondary_fix_display == "隐藏":
-            # 隐藏"二次修复"模块
-            self.secondary_fix_frame.place_forget()
-            # 调整UI布局
-            self.update_ui_layout()
-        else:  # 显示
-            # 显示"二次修复"模块
-            self.secondary_fix_frame.place(x=10, y=255, width=1150, height=185)
-            # 调整UI布局
-            self.update_ui_layout()
+        # 根据加载的设置值动态调整UI布局
+        self.update_module_visibility()
+        
+        # 初始化二次修复状态标签
+        self.update_secondary_fix_status_label()
         
         # 绑定窗口关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -636,6 +634,9 @@ class JasnaGUI:
             ok_btn.focus_set()  # 设置焦点到按钮上
             ok_btn.bind('<Return>', lambda e: dialog.destroy())  # 回车键关闭
             
+            # 添加3分钟后自动关闭功能
+            dialog.after(180000, lambda: dialog.destroy())  # 180000毫秒 = 3分钟
+            
             # 居中显示对话框
             dialog.update_idletasks()
             parent_x = actual_parent.winfo_rootx()
@@ -681,7 +682,7 @@ class JasnaGUI:
         # 1. jasna程序地址
         jasna_label = ttk.Label(self.settings_frame, text="JASNA程序地址", font=self.normal_font)
         jasna_label.place(x=10, y=0)
-        Tooltip(jasna_label, "A卡不能用  N卡低于12G显存不建议使用\n\n指定JASNA主程序文件的完整路径\n\n例如: D:/jasna-0.3/jasna.exe\n\n本GUI程序可以不与jasna.exe程序放在一起\n放在任何位置都可以正常运行\n只要jasna.exe的命令没有改变\n则此程序可以适用于jasna的不同版本")
+        Tooltip(jasna_label, "A卡不能用\n\n指定JASNA主程序文件的完整路径\n\n例如: D:/jasna-0.5/jasna-cli.exe\n\n本GUI程序可以不与jasna-cli.exe程序放在一起\n放在任何位置都可以正常运行\n只要jasna-cli.exe的命令没有改变\n则此程序可以适用于jasna的不同版本")
         
         self.jasna_path_var = tk.StringVar()
         self.jasna_path_entry = ttk.Entry(self.settings_frame, textvariable=self.jasna_path_var, width=30, font=self.normal_font)
@@ -790,16 +791,16 @@ class JasnaGUI:
         
         self.transcode_params_var = tk.StringVar(value='-preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k')
         self.transcode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.transcode_params_var, width=53, font=self.normal_font)
-        self.transcode_params_entry.place(x=140, y=160, width=680)
+        self.transcode_params_entry.place(x=140, y=160, width=530)
         
         # 检测模型选择
         detection_model_label = ttk.Label(self.settings_frame, text="检测模型", font=self.normal_font)
-        detection_model_label.place(x=860, y=160, width=80, height=30)
-        Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: rfdetr-v3\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v3: 最新版本的RFDetr模型，也就是jasna-v3检测模型\nlada-yolo-v4: 最新版本的Lada-YOLO模型，也就是lada-v4f模型\nrfdetr-v2: 旧版本的RFDetr模型，也就是jasna-v2检测模型\nlada-yolo-v2: 旧版本的Lada-YOLO模型，也就是lada-v2模型''')
-        
+        detection_model_label.place(x=710, y=160, width=80, height=30)
+        Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: lada-yolo-v4\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v5: 最新版本的RFDetr模型\nrfdetr-v4: RFDetr模型v4版本\nlada-yolo-v4: 最新版本的Lada-YOLO模型，也就是lada-v4f模型\nrfdetr-v3: RFDetr模型v3版本，也就是jasna-v3检测模型\nlada-yolo-v2: 旧版本的Lada-YOLO模型，也就是lada-v2模型''')
+
         # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
-        detection_model_options = ["rfdetr-v4", "lada-yolo-v4", "rfdetr-v3", "lada-yolo-v2"]
-        self.detection_model_current_option_index = 0  # 当前选项索引
+        detection_model_options = ["rfdetr-v5", "rfdetr-v4", "lada-yolo-v4", "rfdetr-v3", "lada-yolo-v2"]
+        self.detection_model_current_option_index = 2  # 当前选项索引，默认lada-yolo-v4
         
         # 确保detection_model_var被正确初始化
         if not hasattr(self, 'detection_model_var') or self.detection_model_var is None:
@@ -818,10 +819,10 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.detection_model_button.place(x=940, y=160, width=180, height=30)
+        self.detection_model_button.place(x=790, y=160, width=180, height=30)
         
-        # 初始化显示，默认使用rfdetr-v3
-        self.detection_model_var.set(detection_model_options[0])
+        # 初始化显示，默认使用lada-yolo-v4
+        self.detection_model_var.set(detection_model_options[2])
         self.detection_model_options_list = detection_model_options
         
         # 创建右键菜单
@@ -832,18 +833,31 @@ class JasnaGUI:
                 return lambda: self.select_detection_model_option(opt)
             self.detection_model_menu.add_command(label=option, command=make_command(option))
         
+        # 检测阈值
+        detection_threshold_label = ttk.Label(self.settings_frame, text="检测阈值", font=self.normal_font)
+        detection_threshold_label.place(x=990, y=160, width=80, height=30)
+        Tooltip(detection_threshold_label, "马赛克检测的置信度阈值\n\n取值范围：0.00-1.00\n默认值：0.20\n\n数值越小，检测越严格，可能漏检更少的马赛克\n数值越大，检测越宽松，可能减少误检\n请谨慎修改此值！")
+        
+        self.detection_threshold_var = tk.StringVar(value="0.20")
+        self.detection_threshold_entry = ttk.Entry(self.settings_frame, textvariable=self.detection_threshold_var, width=6, font=self.normal_font, justify='center')
+        self.detection_threshold_entry.place(x=1070, y=160, width=50, height=30)
+        # 绑定修改事件，弹窗提示用户（使用FocusOut事件，只在输入框失去焦点且值改变时触发）
+        self._detection_threshold_last_value = "0.20"
+        self.detection_threshold_entry.bind('<FocusOut>', self.on_detection_threshold_focus_out)
+        self.detection_threshold_entry.bind('<Return>', self.on_detection_threshold_focus_out)
+        
         # 二次修复模块 - 插入到自定义设置模块下方
         self.secondary_fix_frame = ttk.LabelFrame(self.root, text="二次修复", padding="10")
-        self.secondary_fix_frame.place(x=10, y=255, width=1150, height=185)
+        self.secondary_fix_frame.place(x=10, y=255, width=1150, height=150)
         self.secondary_fix_frame.configure(style="Title.TLabelframe")
         
         # 二次修复主模块组件
         secondary_fix_label = ttk.Label(self.secondary_fix_frame, text="使用软件", font=self.normal_font)
         secondary_fix_label.place(x=10, y=10)
-        Tooltip(secondary_fix_label, "选择二次修复使用的软件\n\n无：不使用任何二次修复软件\nTVAI：使用Topaz Video AI进行二次修复\nSwin2SR：使用Swin2SR进行超分辨率修复\n\n默认值为\"无\"\n\n如果要使用的话作者K佬是推荐使用TVAI的\n\n在2080TI-22G上实测使用后速度慢一倍左右\n\n可能我设置的参数不对\n暂时没看到什么太大的效果提升")
+        Tooltip(secondary_fix_label, "选择二次修复使用的软件\n\n无：不使用任何二次修复软件\nTVAI：使用Topaz Video AI进行二次修复\nRTX-SR：使用NVIDIA RTX Super Resolution进行超分辨率修复\n\n默认值为\"无\"\n\n如果要使用的话作者K佬是推荐使用RTX-SR的")
         
         # 二次修复选项 - 使用自定义按钮实现，避免下拉箭头
-        secondary_fix_options = ["无", "TVAI", "Swin2SR"]
+        secondary_fix_options = ["无", "RTX-SR"]
         self.secondary_fix_current_option_index = 0  # 当前选项索引
         
         # 创建一个带有内凹效果的自定义按钮
@@ -873,122 +887,130 @@ class JasnaGUI:
                 return lambda: self.select_secondary_fix_option(opt)
             self.secondary_fix_menu.add_command(label=option, command=make_command(option))
         
-        # TVAI详细设置子模块
-        self.tvai_frame = ttk.LabelFrame(self.secondary_fix_frame, text="TVAI详细设置", padding="10")
-        self.tvai_frame.place(x=260, y=0, width=865, height=135)
-        self.tvai_frame.configure(style="Title.TLabelframe")
-        
-        # ffmpeg程序地址
-        ffmpeg_label = ttk.Label(self.tvai_frame, text="TVAI的ffmpeg地址", font=self.normal_font)
-        ffmpeg_label.place(x=0, y=8)
-        Tooltip(ffmpeg_label, "TVAI使用的ffmpeg程序路径\n\n找到TVAI的安装路径\n在安装路径的根目录中找到“ffmpeg.exe“\n选中它后，点确认")
-        
-        self.ffmpeg_path_entry = ttk.Entry(self.tvai_frame, textvariable=self.ffmpeg_path_var, width=30, font=self.normal_font)
-        self.ffmpeg_path_entry.place(x=160, y=8, width=210)
-        
-        ffmpeg_browse_btn = ttk.Button(self.tvai_frame, text="浏览", command=self.browse_ffmpeg_path, style="TButton")
-        ffmpeg_browse_btn.place(x=380, y=8, width=60)
-        
-        # 模型名称
-        model_label = ttk.Label(self.tvai_frame, text="模型名称", font=self.normal_font)
-        model_label.place(x=450, y=8)
-        Tooltip(model_label, "TVAI使用的模型名称\n\n默认值为\"iris-2\"\n\n所有模型需要在TVAI中先下载完成\n\n所有模型名称都是基于TVAI-7.1.0制作，不确保能适用于其他版本\n\niris-2猜测为TVAI软件中的iris（低质量）\niris-3猜测为TVAI软件中的iris（中等质量）\nprob-4猜测为TVAI软件中的Proteus\nrhea-1猜测为TVAI软件中的Rhea\nrxl-1猜测为TVAI软件中的Rhea XL\nthd-3猜测为TVAI软件中Theia(Fine Tune Detail)\nthf-4猜测为TVAI软件中Theia(Fine Tune Fidelity)\nnyx-3猜测为TVAI软件中Nyx\nnxf-1猜测为TVAI软件中Nyx Fast\ngcg-5猜测为TVAI软件中Gaia(Computer Generated)\nghq-5猜测为TVAI软件中Gaia(High Quality)\nahq-12猜测为TVAI软件中Artemis(High Quality)\nalq-13猜测为TVAI软件中Artemis(Low Quality)\nalqs-2猜测为TVAI软件中Artemis(Strong Halo)\namq-13猜测为TVAI软件中Artemis(Medium Quality)\namqs-2猜测为TVAI软件中Artemis(Medium Halo)\naaa-9猜测为TVAI软件中Artemis(Aliasing or Moire)")
-        
-        # 模型名称选项 - 使用自定义按钮实现，避免下拉箭头
-        tvai_model_options = ["iris-2", "iris-3", "prob-4", "rhea-1", "rxl-1", "thd-3", "thf-4", "nyx-3", "nxf-1", "gcg-5", "ghq-5", "ahq-12", "alq-13", "alqs-2", "amq-13", "amqs-2", "aaa-9"]
-        self.tvai_model_current_option_index = 0  # 当前选项索引
-        
-        # 创建一个带有内凹效果的自定义按钮
-        self.tvai_model_button = tk.Button(
-            self.tvai_frame, 
-            textvariable=self.tvai_model_var,
-            command=self.show_tvai_model_menu,
+        # RTX-SR详细设置子模块
+        self.rtx_sr_frame = ttk.LabelFrame(self.secondary_fix_frame, text="RTX-SR详细设置", padding=(10, 20, 10, 10))
+        self.rtx_sr_frame.place(x=350, y=0, width=435, height=100)
+        self.rtx_sr_frame.configure(style="LeftAligned.TLabelframe")
+
+        # RTX-SR缩放
+        rtx_sr_scale_label = ttk.Label(self.rtx_sr_frame, text="缩放", font=self.normal_font)
+        rtx_sr_scale_label.place(x=0, y=0, width=40)
+        Tooltip(rtx_sr_scale_label, "RTX-SR处理时的缩放设置\n\n2X：放大2倍\n4X：放大4倍\n\n默认值为\"4X\"")
+
+        # RTX-SR缩放下拉选项
+        self.rtx_sr_scale_options = ["2X", "4X"]
+        self.rtx_sr_scale_current_index = 1  # 默认选中"4X"
+        self.rtx_sr_scale_button = tk.Button(
+            self.rtx_sr_frame,
+            textvariable=self.rtx_sr_scale_var,
+            command=self.show_rtx_sr_scale_menu,
             font=self.normal_font,
-            bg="white",  # 白色背景
+            bg="white",
             fg="black",
-            relief="sunken",  # 内凹效果
+            relief="sunken",
             bd=2,
             anchor="center",
             highlightthickness=0
         )
-        self.tvai_model_button.place(x=525, y=8, width=80, height=30)
-        
-        # 初始化显示
-        self.tvai_model_var.set(tvai_model_options[tvai_model_options.index("iris-2")])
-        self.tvai_model_options_list = tvai_model_options
-        
-        # 创建右键菜单
-        self.tvai_model_menu = tk.Menu(self.root, tearoff=0)
-        for option in tvai_model_options:
-            # 使用嵌套函数解决lambda捕获变量的问题
+        self.rtx_sr_scale_button.place(x=40, y=0, width=50, height=30)
+        self.rtx_sr_scale_var.set(self.rtx_sr_scale_options[0])  # 默认"2X"
+
+        # 创建缩放下拉菜单
+        self.rtx_sr_scale_menu = tk.Menu(self.root, tearoff=0)
+        for option in self.rtx_sr_scale_options:
             def make_command(opt):
-                return lambda: self.select_tvai_model_option(opt)
-            self.tvai_model_menu.add_command(label=option, command=make_command(option))
-        
-        # 缩放
-        scale_label = ttk.Label(self.tvai_frame, text="缩放", font=self.normal_font)
-        scale_label.place(x=615, y=8)
-        Tooltip(scale_label, "TVAI处理时的缩放倍数\n也就是破解后的马赛克区域再用TVAI处理时的输出的分辨率\n\n默认值为\"4\"\n\n1：原始分辨率，256*256处理为256*256\n2：2倍缩放，256*256处理为512*512\n4：4倍缩放，256*256处理为1024*1024")
-        
-        # 缩放选项 - 使用自定义按钮实现，避免下拉箭头
-        tvai_scale_options = ["1", "2", "4"]
-        self.tvai_scale_current_option_index = 0  # 当前选项索引
-        
-        # 创建一个带有内凹效果的自定义按钮
-        self.tvai_scale_button = tk.Button(
-            self.tvai_frame, 
-            textvariable=self.tvai_scale_var,
-            command=self.show_tvai_scale_menu,
+                return lambda: self.select_rtx_sr_scale_option(opt)
+            self.rtx_sr_scale_menu.add_command(label=option, command=make_command(option))
+
+        # RTX-SR质量（位置向右移动100像素）
+        rtx_sr_quality_label = ttk.Label(self.rtx_sr_frame, text="质量", font=self.normal_font)
+        rtx_sr_quality_label.place(x=100, y=0)
+        Tooltip(rtx_sr_quality_label, "RTX-SR处理时的质量设置\n\n低：low\n中：medium\n高：high\n超高：ultra\n\n默认值为\"高\"")
+
+        # RTX-SR质量下拉选项
+        self.rtx_sr_quality_options = ["低", "中", "高", "超高"]
+        self.rtx_sr_quality_current_index = 2  # 默认选中"高"
+        self.rtx_sr_quality_button = tk.Button(
+            self.rtx_sr_frame,
+            textvariable=self.rtx_sr_quality_var,
+            command=self.show_rtx_sr_quality_menu,
             font=self.normal_font,
-            bg="white",  # 白色背景
+            bg="white",
             fg="black",
-            relief="sunken",  # 内凹效果
+            relief="sunken",
             bd=2,
             anchor="center",
             highlightthickness=0
         )
-        self.tvai_scale_button.place(x=655, y=8, width=60, height=30)
-        
-        # 初始化显示
-        self.tvai_scale_var.set(tvai_scale_options[tvai_scale_options.index("4")])
-        self.tvai_scale_options_list = tvai_scale_options
-        
-        # 创建右键菜单
-        self.tvai_scale_menu = tk.Menu(self.root, tearoff=0)
-        for option in tvai_scale_options:
-            # 使用嵌套函数解决lambda捕获变量的问题
+        self.rtx_sr_quality_button.place(x=140, y=0, width=50, height=30)
+        self.rtx_sr_quality_var.set(self.rtx_sr_quality_options[2])  # 默认"高"
+
+        # 创建质量下拉菜单
+        self.rtx_sr_quality_menu = tk.Menu(self.root, tearoff=0)
+        for option in self.rtx_sr_quality_options:
             def make_command(opt):
-                return lambda: self.select_tvai_scale_option(opt)
-            self.tvai_scale_menu.add_command(label=option, command=make_command(option))
-        
-        # 线程数
-        threads_label = ttk.Label(self.tvai_frame, text="线程数", font=self.normal_font)
-        threads_label.place(x=725, y=8)
-        Tooltip(threads_label, "TVAI使用的线程数\n\n默认值为\"2\"\n\n同时启动几条TVAI处理线程\n线程越多，处理速度越快\n但也会增加显存占用")
-        
-        self.tvai_threads_entry = ttk.Entry(self.tvai_frame, textvariable=self.tvai_threads_var, width=9, font=self.normal_font, justify='center')
-        self.tvai_threads_entry.place(x=780, y=8, width=60)
-        
-        # 附加参数
-        params_label = ttk.Label(self.tvai_frame, text="附加参数", font=self.normal_font)
-        params_label.place(x=5, y=55)
-        Tooltip(params_label, "TVAI的附加参数\n默认值为K佬设置的默认参数\n\n这些参数应该是TVAI中选择“启用参数”后的选项值\n\n新手不建议调整这里，除非你知道每一项的含义")
-        
-        self.tvai_params_entry = ttk.Entry(self.tvai_frame, textvariable=self.tvai_params_var, width=53, font=self.normal_font)
-        self.tvai_params_entry.place(x=85, y=55, width=755)
-        
-        # Swin2SR详细设置子模块
-        self.swin2sr_frame = ttk.LabelFrame(self.secondary_fix_frame, text="Swin2SR详细设置", padding=(10, 20, 10, 10))
-        self.swin2sr_frame.place(x=0, y=45, width=250, height=90)
-        self.swin2sr_frame.configure(style="LeftAligned.TLabelframe")
-        
-        # Swin2SR批量大小
-        swin2sr_batch_label = ttk.Label(self.swin2sr_frame, text="Swim2SR批量大小", font=self.normal_font)
-        swin2sr_batch_label.place(x=0, y=0)
-        Tooltip(swin2sr_batch_label, "Swin2SR处理时的批量大小\n\n具体没研究过\n请自行查阅相关资料")
-        
-        self.swin2sr_batch_entry = ttk.Entry(self.swin2sr_frame, textvariable=self.swin2sr_batch_size_var, width=9, font=self.normal_font, justify='center')
-        self.swin2sr_batch_entry.place(x=150, y=0, width=80)
+                return lambda: self.select_rtx_sr_quality_option(opt)
+            self.rtx_sr_quality_menu.add_command(label=option, command=make_command(option))
+
+        # RTX-SR降噪（位置向右移动100像素）
+        rtx_sr_denoise_label = ttk.Label(self.rtx_sr_frame, text="降噪", font=self.normal_font)
+        rtx_sr_denoise_label.place(x=200, y=0)
+        Tooltip(rtx_sr_denoise_label, "RTX-SR处理时的降噪设置\n\n无：none\n低：low\n中：medium\n高：high\n超高：ultra\n\n默认值为\"低\"")
+
+        # RTX-SR降噪下拉选项
+        self.rtx_sr_denoise_options = ["无", "低", "中", "高", "超高"]
+        self.rtx_sr_denoise_current_index = 1  # 默认选中"低"
+        self.rtx_sr_denoise_button = tk.Button(
+            self.rtx_sr_frame,
+            textvariable=self.rtx_sr_denoise_var,
+            command=self.show_rtx_sr_denoise_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.rtx_sr_denoise_button.place(x=240, y=0, width=50, height=30)
+        self.rtx_sr_denoise_var.set(self.rtx_sr_denoise_options[1])  # 默认"低"
+
+        # 创建降噪下拉菜单
+        self.rtx_sr_denoise_menu = tk.Menu(self.root, tearoff=0)
+        for option in self.rtx_sr_denoise_options:
+            def make_command(opt):
+                return lambda: self.select_rtx_sr_denoise_option(opt)
+            self.rtx_sr_denoise_menu.add_command(label=option, command=make_command(option))
+
+        # RTX-SR去模糊（位置向右移动90像素）
+        rtx_sr_deblur_label = ttk.Label(self.rtx_sr_frame, text="去模糊", font=self.normal_font)
+        rtx_sr_deblur_label.place(x=300, y=0)
+        Tooltip(rtx_sr_deblur_label, "RTX-SR处理时的去模糊设置\n\n无：none\n低：low\n中：medium\n高：high\n超高：ultra\n\n默认值为\"低\"")
+
+        # RTX-SR去模糊下拉选项
+        self.rtx_sr_deblur_options = ["无", "低", "中", "高", "超高"]
+        self.rtx_sr_deblur_current_index = 1  # 默认选中"低"
+        self.rtx_sr_deblur_button = tk.Button(
+            self.rtx_sr_frame,
+            textvariable=self.rtx_sr_deblur_var,
+            command=self.show_rtx_sr_deblur_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.rtx_sr_deblur_button.place(x=360, y=0, width=50, height=30)
+        self.rtx_sr_deblur_var.set(self.rtx_sr_deblur_options[1])  # 默认"低"
+
+        # 创建去模糊下拉菜单
+        self.rtx_sr_deblur_menu = tk.Menu(self.root, tearoff=0)
+        for option in self.rtx_sr_deblur_options:
+            def make_command(opt):
+                return lambda: self.select_rtx_sr_deblur_option(opt)
+            self.rtx_sr_deblur_menu.add_command(label=option, command=make_command(option))
         
         # 控制按钮区域 - 使用place布局
         self.button_frame = ttk.Frame(self.root)
@@ -997,42 +1019,76 @@ class JasnaGUI:
         # 设置按钮样式
         style.configure("TButton", font=self.normal_font)
         
-        # 二次修复显示/隐藏选项
-        secondary_fix_label = ttk.Label(self.button_frame, text="二次修复", font=self.normal_font)
-        secondary_fix_label.place(x=100, y=12, width=100, height=30)
-        Tooltip(secondary_fix_label, "二次修复模块控制\n\n用于控制是否显示二次修复模块，该模块包含TVAI和Swin2SR两种修复选项。\n\n默认值为\"隐藏\"，需要时可设置为\"显示\"。")
-        
-        # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
+        # 第一个下拉选项：显示/隐藏
         secondary_fix_display_options = ["显示", "隐藏"]
         self.secondary_fix_display_current_option_index = 1  # 当前选项索引，默认值为"隐藏"
         
-        # 创建一个带有内凹效果的自定义按钮
+        # 创建第一个下拉按钮
         self.secondary_fix_display_button = tk.Button(
             self.button_frame, 
             textvariable=self.secondary_fix_display_var,
             command=self.show_secondary_fix_display_menu,
             font=self.normal_font,
-            bg="white",  # 白色背景
+            bg="white",
             fg="black",
-            relief="sunken",  # 内凹效果
+            relief="sunken",
             bd=2,
             anchor="center",
             highlightthickness=0
         )
-        self.secondary_fix_display_button.place(x=25, y=12, width=70, height=30)
-        Tooltip(self.secondary_fix_display_button, "选择二次修复模块的显示状态\n\n显示：显示完整的二次修复模块，包括TVAI和Swin2SR子模块\n隐藏：隐藏二次修复模块，释放界面空间\n\n默认值为\"隐藏\"。")
+        self.secondary_fix_display_button.place(x=10, y=12, width=70, height=30)
+        Tooltip(self.secondary_fix_display_button, "选择显示或隐藏\n\n显示：显示对应的设置模块\n隐藏：隐藏对应的设置模块\n\n默认值为\"隐藏\"。")
         
         # 初始化显示
         self.secondary_fix_display_var.set(secondary_fix_display_options[1])
         self.secondary_fix_display_options_list = secondary_fix_display_options
         
-        # 创建右键菜单
+        # 创建第一个下拉菜单
         self.secondary_fix_display_menu = tk.Menu(self.root, tearoff=0)
         for option in secondary_fix_display_options:
-            # 使用嵌套函数解决lambda捕获变量的问题
             def make_command(opt):
                 return lambda: self.select_secondary_fix_display_option(opt)
             self.secondary_fix_display_menu.add_command(label=option, command=make_command(option))
+        
+        # 第二个下拉选项：二次修复/全部设置
+        settings_mode_options = ["二次修复", "全部设置"]
+        self.settings_mode_current_option_index = 0  # 当前选项索引，默认值为"二次修复"
+        
+        # 创建第二个下拉按钮
+        self.settings_mode_button = tk.Button(
+            self.button_frame, 
+            textvariable=self.settings_mode_var,
+            command=self.show_settings_mode_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.settings_mode_button.place(x=90, y=12, width=90, height=30)
+        Tooltip(self.settings_mode_button, "选择设置模式\n\n二次修复：控制二次修复模块的显示/隐藏\n全部设置：控制自定义设置和二次修复模块的显示/隐藏\n\n默认值为\"二次修复\"。")
+        
+        # 二次修复状态标签（当二次修复隐藏时显示当前使用的软件）
+        self.secondary_fix_status_var = tk.StringVar(value="")
+        self.secondary_fix_status_label = ttk.Label(
+            self.button_frame,
+            textvariable=self.secondary_fix_status_var,
+            font=("Microsoft YaHei", 9)  # 比normal_font小一点的字号
+        )
+        self.secondary_fix_status_label.place(x=185, y=15, width=80, height=25)
+        
+        # 初始化显示
+        self.settings_mode_var.set(settings_mode_options[0])
+        self.settings_mode_options_list = settings_mode_options
+        
+        # 创建第二个下拉菜单
+        self.settings_mode_menu = tk.Menu(self.root, tearoff=0)
+        for option in settings_mode_options:
+            def make_command(opt):
+                return lambda: self.select_settings_mode_option(opt)
+            self.settings_mode_menu.add_command(label=option, command=make_command(option))
         
         scan_btn = ttk.Button(self.button_frame, text="扫描视频", command=self.scan_videos, style="TButton")
         scan_btn.place(x=275, y=10, width=100, height=35)
@@ -1058,7 +1114,7 @@ class JasnaGUI:
         
         # 处理完成后操作选择
         post_processing_label = ttk.Label(self.button_frame, text="处理完成后", font=self.normal_font)
-        post_processing_label.place(x=965, y=12, width=100, height=30)
+        post_processing_label.place(x=975, y=12, width=100, height=30)
         Tooltip(post_processing_label, "选择视频处理全部完成后执行的操作\n无: 不执行任何操作\n退出并休眠: 关闭软件并使计算机休眠\n退出并关机: 关闭软件并关闭计算机")
         
         # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
@@ -1082,7 +1138,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.post_processing_button.place(x=1060, y=12, width=70, height=30)
+        self.post_processing_button.place(x=1070, y=12, width=70, height=30)
         
         # 初始化显示，确保每次启动时均初始化为默认的"无"选项
         self.post_processing_action_var.set(post_processing_options[0])
@@ -1344,7 +1400,87 @@ class JasnaGUI:
         self.secondary_fix_var.set(option)
         # 触发选择事件
         self.on_secondary_fix_change(None)
-    
+        # 更新状态标签（如果二次修复处于隐藏状态）
+        self.update_secondary_fix_status_label()
+
+    def translate_rtx_option_to_english(self, chinese_option):
+        """将RTX-SR中文选项转换为英文"""
+        translation_map = {
+            "无": "none",
+            "低": "low",
+            "中": "medium",
+            "高": "high",
+            "超高": "ultra"
+        }
+        return translation_map.get(chinese_option, "medium")
+
+    def translate_rtx_option_to_chinese(self, english_option):
+        """将RTX-SR英文选项转换为中文"""
+        translation_map = {
+            "none": "无",
+            "low": "低",
+            "medium": "中",
+            "high": "高",
+            "ultra": "超高"
+        }
+        return translation_map.get(english_option, "中")
+
+    def show_rtx_sr_quality_menu(self):
+        """显示RTX-SR质量选项菜单"""
+        try:
+            self.rtx_sr_quality_menu.tk_popup(
+                self.rtx_sr_quality_button.winfo_rootx(),
+                self.rtx_sr_quality_button.winfo_rooty() + self.rtx_sr_quality_button.winfo_height()
+            )
+        finally:
+            self.rtx_sr_quality_menu.grab_release()
+
+    def select_rtx_sr_quality_option(self, option):
+        """选择RTX-SR质量选项"""
+        self.rtx_sr_quality_var.set(option)
+
+    def show_rtx_sr_denoise_menu(self):
+        """显示RTX-SR降噪选项菜单"""
+        try:
+            self.rtx_sr_denoise_menu.tk_popup(
+                self.rtx_sr_denoise_button.winfo_rootx(),
+                self.rtx_sr_denoise_button.winfo_rooty() + self.rtx_sr_denoise_button.winfo_height()
+            )
+        finally:
+            self.rtx_sr_denoise_menu.grab_release()
+
+    def select_rtx_sr_denoise_option(self, option):
+        """选择RTX-SR降噪选项"""
+        self.rtx_sr_denoise_var.set(option)
+
+    def show_rtx_sr_deblur_menu(self):
+        """显示RTX-SR去模糊选项菜单"""
+        try:
+            self.rtx_sr_deblur_menu.tk_popup(
+                self.rtx_sr_deblur_button.winfo_rootx(),
+                self.rtx_sr_deblur_button.winfo_rooty() + self.rtx_sr_deblur_button.winfo_height()
+            )
+        finally:
+            self.rtx_sr_deblur_menu.grab_release()
+
+    def select_rtx_sr_deblur_option(self, option):
+        """选择RTX-SR去模糊选项"""
+        self.rtx_sr_deblur_var.set(option)
+
+    def show_rtx_sr_scale_menu(self):
+        """显示RTX-SR缩放选项菜单"""
+        try:
+            self.rtx_sr_scale_menu.tk_popup(
+                self.rtx_sr_scale_button.winfo_rootx(),
+                self.rtx_sr_scale_button.winfo_rooty() + self.rtx_sr_scale_button.winfo_height()
+            )
+        finally:
+            self.rtx_sr_scale_menu.grab_release()
+
+    def select_rtx_sr_scale_option(self, option):
+        """选择RTX-SR缩放选项"""
+        self.rtx_sr_scale_var.set(option)
+
     def show_tvai_model_menu(self):
         """显示TVAI模型选项菜单"""
         # 在按钮位置显示菜单
@@ -1395,6 +1531,7 @@ class JasnaGUI:
             "detection_model_history": getattr(self, 'detection_model_history', []),  # 添加检测模型历史记录
             # 检测模型设置
             "detection_model": self.detection_model_var.get(),  # 新增检测模型
+            "detection_threshold": self.detection_threshold_var.get(),  # 检测阈值
             # 二次修复相关设置
             "secondary_fix": self.secondary_fix_var.get(),
             "ffmpeg_path": self.ffmpeg_path_var.get(),
@@ -1402,8 +1539,13 @@ class JasnaGUI:
             "tvai_scale": self.tvai_scale_var.get(),
             "tvai_threads": self.tvai_threads_var.get(),
             "tvai_params": self.tvai_params_var.get(),
-            "swin2sr_batch_size": self.swin2sr_batch_size_var.get(),
-            "secondary_fix_display": self.secondary_fix_display_var.get()
+            # RTX-SR相关设置（保存为英文值）
+            "rtx_sr_scale": self.rtx_sr_scale_var.get().replace("X", ""),  # 2X->2, 4X->4
+            "rtx_sr_quality": self.translate_rtx_option_to_english(self.rtx_sr_quality_var.get()),
+            "rtx_sr_denoise": self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get()),
+            "rtx_sr_deblur": self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get()),
+            "secondary_fix_display": self.secondary_fix_display_var.get(),
+            "settings_mode": self.settings_mode_var.get()
         }
         
         try:
@@ -1449,7 +1591,10 @@ class JasnaGUI:
                 self.detection_model_history = settings.get("detection_model_history", [])
                 
                 # 加载检测模型设置
-                self.detection_model_var.set(settings.get("detection_model", "rfdetr-v3"))  # 新增检测模型，默认rfdetr-v3
+                self.detection_model_var.set(settings.get("detection_model", "lada-yolo-v4"))  # 新增检测模型，默认lada-yolo-v4
+                self.detection_threshold_var.set(settings.get("detection_threshold", "0.20"))  # 检测阈值，默认0.20
+                # 更新检测阈值的上次值，避免加载配置后触发弹窗
+                self._detection_threshold_last_value = self.detection_threshold_var.get()
                 
                 # 加载二次修复相关设置
                 self.secondary_fix_var.set(settings.get("secondary_fix", "无"))
@@ -1458,9 +1603,19 @@ class JasnaGUI:
                 self.tvai_scale_var.set(settings.get("tvai_scale", "4"))
                 self.tvai_threads_var.set(settings.get("tvai_threads", "2"))
                 self.tvai_params_var.set(settings.get("tvai_params", "preblur=0:noise=0:details=0:halo=0:blur=0:compression=0:estimate=8:blend=0.2:device=-2:vram=1:instances=1"))
-                self.swin2sr_batch_size_var.set(settings.get("swin2sr_batch_size", "8"))
+                # 加载RTX-SR相关设置
+                rtx_scale_value = settings.get("rtx_sr_scale", "2")  # 默认2
+                self.rtx_sr_scale_var.set(f"{rtx_scale_value}X")  # 2->2X, 4->4X
+                rtx_quality_english = settings.get("rtx_sr_quality", "high")
+                rtx_denoise_english = settings.get("rtx_sr_denoise", "medium")
+                rtx_deblur_english = settings.get("rtx_sr_deblur", "none")
+                self.rtx_sr_quality_var.set(self.translate_rtx_option_to_chinese(rtx_quality_english))
+                self.rtx_sr_denoise_var.set(self.translate_rtx_option_to_chinese(rtx_denoise_english))
+                self.rtx_sr_deblur_var.set(self.translate_rtx_option_to_chinese(rtx_deblur_english))
                 # 加载二次修复显示/隐藏设置
                 self.secondary_fix_display_var.set(settings.get("secondary_fix_display", "隐藏"))
+                # 加载设置模式
+                self.settings_mode_var.set(settings.get("settings_mode", "二次修复"))
                 
                 self.status_var.set("设置已加载")
                 self.logger.info("设置已从配置文件加载")
@@ -2298,7 +2453,7 @@ class JasnaGUI:
                                 encode_params = f'"{self.encode_params_var.get()}"'
                                 
                                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
                                 
                                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                                 secondary_fix_option = self.secondary_fix_var.get()
@@ -2317,11 +2472,14 @@ class JasnaGUI:
                                         tvai_scale = scale
                                     
                                     cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
-                                elif secondary_fix_option == "Swin2SR":
-                                    # 添加Swin2SR相关参数
-                                    batch_size = self.swin2sr_batch_size_var.get()
-                                    cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
-                                
+                                elif secondary_fix_option == "RTX-SR":
+                                    # 添加RTX-SR相关参数
+                                    rtx_scale = self.rtx_sr_scale_var.get().replace("X", "")  # 2X->2, 4X->4
+                                    rtx_quality = self.translate_rtx_option_to_english(self.rtx_sr_quality_var.get())
+                                    rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
+                                    rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
+                                    cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+
                                 self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
                                 self.logger.info(f"完整命令: {cmd}")
                                 self.logger.info(f"工作目录: {jasna_dir}")
@@ -2683,7 +2841,7 @@ class JasnaGUI:
                 encode_params = f'"{self.encode_params_var.get()}"'
                 
                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
                 
                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                 secondary_fix_option = self.secondary_fix_var.get()
@@ -2702,11 +2860,14 @@ class JasnaGUI:
                         tvai_scale = scale
                     
                     cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
-                elif secondary_fix_option == "Swin2SR":
-                    # 添加Swin2SR相关参数
-                    batch_size = self.swin2sr_batch_size_var.get()
-                    cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
-                
+                elif secondary_fix_option == "RTX-SR":
+                    # 添加RTX-SR相关参数
+                    rtx_scale = self.rtx_sr_scale_var.get().replace("X", "")  # 2X->2, 4X->4
+                    rtx_quality = self.translate_rtx_option_to_english(self.rtx_sr_quality_var.get())
+                    rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
+                    rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
+                    cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+
                 self.logger.info(f"开始处理视频: {video_file}")
                 self.logger.info(f"完整命令: {cmd}")
                 self.logger.info(f"工作目录: {jasna_dir}")
@@ -3092,7 +3253,7 @@ class JasnaGUI:
                                     encode_params = f'"{self.encode_params_var.get()}"'
                                     
                                     # 构建基础命令，使用根据分辨率选择的切片帧数
-                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
                                     
                                     # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                                     secondary_fix_option = self.secondary_fix_var.get()
@@ -3111,11 +3272,14 @@ class JasnaGUI:
                                             tvai_scale = scale
                                         
                                         cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
-                                    elif secondary_fix_option == "Swin2SR":
-                                        # 添加Swin2SR相关参数
-                                        batch_size = self.swin2sr_batch_size_var.get()
-                                        cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
-                                    
+                                    elif secondary_fix_option == "RTX-SR":
+                                        # 添加RTX-SR相关参数
+                                        rtx_scale = self.rtx_sr_scale_var.get().replace("X", "")  # 2X->2, 4X->4
+                                        rtx_quality = self.translate_rtx_option_to_english(self.rtx_sr_quality_var.get())
+                                        rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
+                                        rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
+                                        cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+
                                     self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
                                     self.logger.info(f"完整命令: {cmd}")
                                     self.logger.info(f"工作目录: {jasna_dir}")
@@ -3661,7 +3825,7 @@ class JasnaGUI:
                         jasna_path = self.jasna_path_var.get()
                         jasna_dir = os.path.dirname(jasna_path)
                         jasna_exe_name = os.path.basename(jasna_path)
-                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()}'
+                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
                         
                         # 确保JASNA目录存在
                         if not os.path.exists(jasna_dir):
@@ -3685,11 +3849,14 @@ class JasnaGUI:
                                 tvai_scale = scale
                             
                             cmd += f' --secondary-restoration tvai --tvai-ffmpeg-path "{ffmpeg_path}" --tvai-model {model_name} --tvai-scale {tvai_scale} --tvai-workers {threads} --tvai-args "{tvai_params}"'
-                        elif secondary_fix_option == "Swin2SR":
-                            # 添加Swin2SR相关参数
-                            batch_size = self.swin2sr_batch_size_var.get()
-                            cmd += f' --secondary-restoration swin2sr --swin2sr-batch-size {batch_size}'
-                        
+                        elif secondary_fix_option == "RTX-SR":
+                            # 添加RTX-SR相关参数
+                            rtx_scale = self.rtx_sr_scale_var.get().replace("X", "")  # 2X->2, 4X->4
+                            rtx_quality = self.translate_rtx_option_to_english(self.rtx_sr_quality_var.get())
+                            rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
+                            rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
+                            cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+
                         self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
                         self.logger.info(f"完整命令: {cmd}")
                         self.logger.info(f"工作目录: {jasna_dir}")
@@ -4755,6 +4922,17 @@ class JasnaGUI:
         """选择检测模型选项"""
         self.detection_model_var.set(option)
     
+    def on_detection_threshold_focus_out(self, event=None):
+        """检测阈值输入框失去焦点时的回调函数，弹窗提示用户
+        
+        只在值真正发生改变时才弹窗提示，避免初始化时弹窗
+        """
+        current_value = self.detection_threshold_var.get()
+        # 检查值是否发生变化
+        if current_value != self._detection_threshold_last_value:
+            self._detection_threshold_last_value = current_value
+            messagebox.showwarning("警告", "此数值影响马赛克检测效果，请谨慎修改！")
+    
     def show_secondary_fix_display_menu(self):
         """显示二次修复显示/隐藏选项菜单"""
         # 在按钮位置显示菜单
@@ -4763,61 +4941,149 @@ class JasnaGUI:
         # 显示菜单
         self.secondary_fix_display_menu.post(x, y)
     
+    def show_settings_mode_menu(self):
+        """显示设置模式选项菜单"""
+        # 在按钮位置显示菜单
+        x = self.settings_mode_button.winfo_rootx()
+        y = self.settings_mode_button.winfo_rooty() + self.settings_mode_button.winfo_height()
+        # 显示菜单
+        self.settings_mode_menu.post(x, y)
+    
+    def update_secondary_fix_status_label(self):
+        """更新二次修复状态标签的显示
+        
+        当"显示/隐藏"下拉选项为"显示"时，不显示任何内容
+        当"显示/隐藏"下拉选项为"隐藏"时，显示当前选择的二次修复使用软件
+        """
+        display_status = self.secondary_fix_display_var.get()
+        if display_status == "显示":
+            # 二次修复显示时，状态标签不显示任何内容
+            self.secondary_fix_status_var.set("")
+        else:
+            # 二次修复隐藏时，显示当前使用的软件
+            secondary_fix_software = self.secondary_fix_var.get()
+            if secondary_fix_software == "无":
+                self.secondary_fix_status_var.set("（无）")
+            else:
+                self.secondary_fix_status_var.set(f"（{secondary_fix_software}）")
+    
     def select_secondary_fix_display_option(self, option):
         """选择二次修复显示/隐藏选项"""
         self.secondary_fix_display_var.set(option)
-        # 根据选择的选项来显示或隐藏"二次修复"模块
-        if option == "隐藏":
-            # 隐藏"二次修复"模块
-            self.secondary_fix_frame.place_forget()
-        else:  # 显示
-            # 恢复显示"二次修复"模块
-            self.secondary_fix_frame.place(x=10, y=255, width=1150, height=185)
-        # 调用update_ui_layout方法来调整UI布局
+        # 更新状态标签
+        self.update_secondary_fix_status_label()
+        # 根据两个下拉选项的组合来显示或隐藏模块
+        self.update_module_visibility()
+    
+    def select_settings_mode_option(self, option):
+        """选择设置模式选项"""
+        self.settings_mode_var.set(option)
+        # 根据两个下拉选项的组合来显示或隐藏模块
+        self.update_module_visibility()
+    
+    def update_module_visibility(self):
+        """根据两个下拉选项的组合更新模块的显示/隐藏状态
+        
+        显示+二次修复：隐藏"自定义设置"模块+显示"二次修复"模块
+        显示+全部设置：显示"自定义设置"模块+显示"二次修复"模块
+        隐藏+二次修复：显示"自定义设置"模块+隐藏"二次修复"模块
+        隐藏+全部设置：隐藏"自定义设置"模块+隐藏"二次修复"模块
+        
+        注意：实际的模块放置由update_ui_layout统一管理
+        """
+        # 调用update_ui_layout方法来调整UI布局（内部会根据状态决定显示哪些模块）
         self.update_ui_layout()
     
     def update_ui_layout(self):
-        """更新UI布局，根据二次修复模块的显示状态调整下方组件的位置和窗口大小"""
-        # 二次修复模块的高度
-        secondary_fix_height = 185
-        # 获取当前窗口的宽度和高度
+        """更新UI布局，根据自定义设置和二次修复模块的显示状态调整下方组件的位置和窗口大小
+        
+        完全重新计算所有模块的位置和窗口高度：
+        - 自定义设置模块高度: 240像素
+        - 二次修复模块高度: 150像素
+        - 按钮控制区域高度: 60像素
+        - 进度区域高度: 165像素
+        - 视频列表区域高度: 280像素
+        - 处理总结高度: 60像素
+        - 状态栏高度: 30像素
+        - 模块间距: 5像素
+        """
+        # 模块高度定义
+        SETTINGS_HEIGHT = 240      # 自定义设置模块高度
+        SECONDARY_HEIGHT = 150     # 二次修复模块高度
+        BUTTON_HEIGHT = 60         # 按钮控制区域高度
+        PROGRESS_HEIGHT = 165      # 进度区域高度
+        LISTS_HEIGHT = 280         # 视频列表区域高度
+        SUMMARY_HEIGHT = 60        # 处理总结高度
+        STATUS_HEIGHT = 30         # 状态栏高度
+        SPACING = 5                # 模块间距
+        MARGIN_TOP = 10            # 顶部边距
+        
+        # 获取当前窗口宽度
         current_width = self.root.winfo_width()
-        current_height = self.root.winfo_height()
         
-        # 检查二次修复模块是否显示
-        is_secondary_fix_visible = self.secondary_fix_display_var.get() == "显示"
+        # 检查两个模块的显示状态
+        # 根据两个下拉选项的组合决定显示哪些模块：
+        # 显示+二次修复：隐藏自定义设置，显示二次修复
+        # 显示+全部设置：显示自定义设置，显示二次修复
+        # 隐藏+二次修复：显示自定义设置，隐藏二次修复
+        # 隐藏+全部设置：隐藏自定义设置，隐藏二次修复
+        display_status = self.secondary_fix_display_var.get()
+        settings_mode = self.settings_mode_var.get()
         
-        # 调整下方组件的位置
-        if is_secondary_fix_visible:
-            # 二次修复模块显示时，组件恢复到原始位置
-            self.button_frame.place(x=10, y=440, width=1150, height=60)
-            self.progress_frame.place(x=10, y=490, width=1150, height=165)
-            # 调整其他下方组件的位置
-            # 视频列表显示区域
-            self.lists_frame.place(x=10, y=670, width=1150, height=280)
-            # 处理总结情况
-            self.summary_frame.place(x=10, y=940, width=1150, height=60)
-            # 状态栏
-            status_bar = self.root.children.get('!label')
-            if status_bar:
-                status_bar.place(x=10, y=1005, width=1150, height=30)
-            # 调整窗口大小
-            new_height = 1040  # 窗口高度增加5像素以适应状态栏下移
+        if display_status == "显示" and settings_mode == "二次修复":
+            is_settings_visible = False
+            is_secondary_fix_visible = True
+        elif display_status == "显示" and settings_mode == "全部设置":
+            is_settings_visible = True
+            is_secondary_fix_visible = True
+        elif display_status == "隐藏" and settings_mode == "二次修复":
+            is_settings_visible = True
+            is_secondary_fix_visible = False
+        else:  # 隐藏+全部设置
+            is_settings_visible = False
+            is_secondary_fix_visible = False
+        
+        # 计算当前Y坐标（从顶部开始）
+        current_y = MARGIN_TOP
+        
+        # 放置自定义设置模块
+        if is_settings_visible:
+            self.settings_frame.place(x=10, y=current_y, width=1150, height=SETTINGS_HEIGHT)
+            current_y += SETTINGS_HEIGHT + SPACING
         else:
-            # 二次修复模块隐藏时，下方组件整体向上移动
-            self.button_frame.place(x=10, y=440 - secondary_fix_height, width=1150, height=60)
-            self.progress_frame.place(x=10, y=490 - secondary_fix_height, width=1150, height=165)
-            # 调整其他下方组件的位置
-            # 视频列表显示区域
-            self.lists_frame.place(x=10, y=670 - secondary_fix_height, width=1150, height=280)
-            # 处理总结情况
-            self.summary_frame.place(x=10, y=940 - secondary_fix_height, width=1150, height=60)
-            # 状态栏
-            status_bar = self.root.children.get('!label')
-            if status_bar:
-                status_bar.place(x=10, y=1005 - secondary_fix_height, width=1150, height=30)
-            # 调整窗口大小
-            new_height = 1040 - secondary_fix_height  # 窗口高度减去二次修复模块的高度
+            self.settings_frame.place_forget()
+        
+        # 放置二次修复模块
+        if is_secondary_fix_visible:
+            self.secondary_fix_frame.place(x=10, y=current_y, width=1150, height=SECONDARY_HEIGHT)
+            current_y += SECONDARY_HEIGHT + SPACING
+        else:
+            self.secondary_fix_frame.place_forget()
+        
+        # 放置按钮控制区域
+        self.button_frame.place(x=10, y=current_y, width=1150, height=BUTTON_HEIGHT)
+        current_y += BUTTON_HEIGHT + SPACING
+        
+        # 放置进度区域
+        self.progress_frame.place(x=10, y=current_y, width=1150, height=PROGRESS_HEIGHT)
+        current_y += PROGRESS_HEIGHT + SPACING
+        
+        # 放置视频列表区域
+        self.lists_frame.place(x=10, y=current_y, width=1150, height=LISTS_HEIGHT)
+        current_y += LISTS_HEIGHT + SPACING
+        
+        # 放置处理总结
+        self.summary_frame.place(x=10, y=current_y, width=1150, height=SUMMARY_HEIGHT)
+        current_y += SUMMARY_HEIGHT + SPACING
+        
+        # 放置状态栏
+        status_bar = self.root.children.get('!label')
+        if status_bar:
+            status_bar.place(x=10, y=current_y, width=1150, height=STATUS_HEIGHT)
+        current_y += STATUS_HEIGHT + SPACING
+        
+        # 计算窗口高度（加上底部边距）
+        new_height = current_y + MARGIN_TOP
         
         # 重新调整窗口大小
         self.root.geometry(f"{current_width}x{new_height}")
@@ -5195,6 +5461,33 @@ class JasnaGUI:
         else:
             self.root.destroy()
 
+    def get_jasna_ffmpeg_path(self):
+        r"""获取JASNA程序目录下的ffmpeg.exe路径
+        
+        从jasna_path_var中提取JASNA程序所在目录，然后拼接 _internal\tools\ffmpeg.exe
+        例如: E:\AI\jasna-0.5.0-alpha6\jasna-cli.exe -> E:\AI\jasna-0.5.0-alpha6\_internal\tools\ffmpeg.exe
+        
+        Returns:
+            str: ffmpeg.exe的完整路径，如果JASNA路径未设置或ffmpeg不存在则返回None
+        """
+        jasna_path = self.jasna_path_var.get()
+        if not jasna_path:
+            return None
+        
+        # 获取JASNA程序所在目录（去掉文件名）
+        jasna_dir = os.path.dirname(jasna_path)
+        if not jasna_dir:
+            return None
+        
+        # 构建ffmpeg路径: JASNA目录\_internal\tools\ffmpeg.exe
+        ffmpeg_path = os.path.join(jasna_dir, '_internal', 'tools', 'ffmpeg.exe')
+        
+        # 检查ffmpeg是否存在
+        if os.path.exists(ffmpeg_path):
+            return ffmpeg_path
+        
+        return None
+
     def transcode_video(self, input_path, output_path):
         """使用FFmpeg对视频进行转码，使用CUDA解码器和hevc_nvenc编码器"""
         try:
@@ -5220,8 +5513,17 @@ class JasnaGUI:
             self.logger.info(f"原始转码参数: {transcode_params}")
             self.logger.info(f"解析出的自定义参数: {' '.join(custom_params)}")
             
+            # 优先使用JASNA目录下的ffmpeg.exe
+            jasna_ffmpeg = self.get_jasna_ffmpeg_path()
+            if jasna_ffmpeg:
+                ffmpeg_executable = jasna_ffmpeg
+                self.logger.info(f"使用JASNA目录下的FFmpeg: {jasna_ffmpeg}")
+            else:
+                ffmpeg_executable = 'ffmpeg'
+                self.logger.info("使用系统PATH中的FFmpeg")
+            
             # 构建完整的FFmpeg命令，确保硬件加速参数在输入文件之前
-            cmd = ['ffmpeg'] + base_hwaccel_params + ['-i', input_path] + fixed_encode_params + custom_params + ['-c:a', 'copy', output_path]
+            cmd = [ffmpeg_executable] + base_hwaccel_params + ['-i', input_path] + fixed_encode_params + custom_params + ['-c:a', 'copy', output_path]
             
             self.logger.info(f"开始转码视频: {input_path}")
             self.logger.info(f"FFmpeg命令: {' '.join(cmd)}")
@@ -5355,7 +5657,8 @@ class JasnaGUI:
                 self.logger.error(f"转码失败，FFmpeg返回码: {return_code}")
                 self.logger.info(f"音频复制模式失败，切换到音频编码模式: {input_path}")
                 # 音频复制失败时，使用AAC编码
-                fallback_cmd = ['ffmpeg'] + base_hwaccel_params + ['-i', input_path] + fixed_encode_params + custom_params + ['-c:a', 'aac', '-b:a', '256k', output_path]
+                # 备用模式也使用相同的ffmpeg_executable
+                fallback_cmd = [ffmpeg_executable] + base_hwaccel_params + ['-i', input_path] + fixed_encode_params + custom_params + ['-c:a', 'aac', '-b:a', '256k', output_path]
                 
                 self.logger.info(f"使用音频编码模式转码: {input_path}")
                 self.logger.info(f"FFmpeg命令: {' '.join(fallback_cmd)}")
@@ -5467,153 +5770,164 @@ class JasnaGUI:
                 
         except FileNotFoundError:
             self.logger.error("FFmpeg未找到，请确保已安装FFmpeg并添加到系统PATH")
-            # 尝试使用本地ffmpeg
+            # 尝试使用JASNA目录下的ffmpeg或本地ffmpeg
             try:
-                local_ffmpeg = os.path.join(os.path.dirname(__file__), 'ffmpeg.exe')
-                if os.path.exists(local_ffmpeg):
-                    # 重新构建命令使用本地ffmpeg
-                    transcode_params = self.transcode_params_var.get()
-                    # 使用预设的转码参数（已包含CUDA解码和hevc_nvenc编码）
-                    
-                    output_path_with_mp4 = output_path if output_path.lower().endswith('.mp4') else output_path + '.mp4'
-                    
-                    # 获取视频信息用于进度显示
-                    video_info_result = self.get_video_info(input_path)
-                    if not video_info_result:
-                        self.logger.error(f"获取视频信息失败: {input_path}")
+                # 首先尝试JASNA目录下的ffmpeg
+                jasna_ffmpeg = self.get_jasna_ffmpeg_path()
+                if jasna_ffmpeg:
+                    local_ffmpeg = jasna_ffmpeg
+                    self.logger.info(f"FileNotFoundError后使用JASNA目录下的FFmpeg: {jasna_ffmpeg}")
+                else:
+                    # 尝试使用本地ffmpeg
+                    local_ffmpeg = os.path.join(os.path.dirname(__file__), 'ffmpeg.exe')
+                    if not os.path.exists(local_ffmpeg):
+                        self.logger.error("未找到可用的FFmpeg，转码失败")
+                        return False
+                    self.logger.info(f"FileNotFoundError后使用本地FFmpeg: {local_ffmpeg}")
+                
+                # 重新构建命令使用本地ffmpeg
+                transcode_params = self.transcode_params_var.get()
+                # 使用预设的转码参数（已包含CUDA解码和hevc_nvenc编码）
+                
+                output_path_with_mp4 = output_path if output_path.lower().endswith('.mp4') else output_path + '.mp4'
+                
+                # 获取视频信息用于进度显示
+                video_info_result = self.get_video_info(input_path)
+                if not video_info_result:
+                    self.logger.error(f"获取视频信息失败: {input_path}")
+                    return False
+                
+                # 由于get_video_info函数设置的是GUI变量而不是返回字典，我们需要从变量中获取信息
+                video_info = {
+                    'resolution': self.video_resolution_var.get(),
+                    'fps': self.video_fps_var.get(),
+                    'duration': self.video_duration_var.get()
+                }
+                
+                # 尝试获取总帧数（如果可用）
+                try:
+                    # 这里需要通过其他方式获取总帧数，因为get_video_info不直接返回字典
+                    total_frames = self.estimate_total_frames(input_path)
+                except:
+                    total_frames = 0  # 如果无法估算，则设为0
+                
+                # 更新处理模式为转码
+                self.processing_mode_var.set("转码")
+                
+                # 显示当前正在转码的视频信息
+                self.root.after(0, lambda: self.current_video_var.set(
+                    f"{os.path.basename(input_path)} | {video_info['resolution']} | {video_info['fps']}fps | {video_info['duration']} | 转码中..."
+                ))
+                
+                # 构建本地FFmpeg命令，按照规范结构组织参数
+                # 基础硬件加速参数
+                base_hwaccel_params = ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda']
+                # 固定编码设置
+                fixed_encode_params = ['-c:v', 'hevc_nvenc']
+                # 用户自定义参数（从transcode_params中提取除固定参数外的部分）
+                custom_params = self.parse_custom_params_for_transcode(transcode_params)
+                
+                # 记录参数解析详情
+                self.logger.info(f"原始转码参数: {transcode_params}")
+                self.logger.info(f"解析出的自定义参数: {' '.join(custom_params)}")
+                
+                # 构建完整的本地FFmpeg命令，确保硬件加速参数在输入文件之前
+                cmd = [local_ffmpeg] + base_hwaccel_params + ['-i', input_path] + fixed_encode_params + custom_params + ['-c:a', 'copy', output_path_with_mp4]
+                
+                self.logger.info(f"使用本地FFmpeg转码: {input_path}")
+                self.logger.info(f"本地FFmpeg命令: {' '.join(cmd)}")
+                self.logger.info(f"NVIDIA硬件加速参数: -hwaccel cuda -hwaccel_output_format cuda -c:v hevc_nvenc")
+                
+                # 执行转码命令并实时监控进度
+                self.current_process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,  # 合并输出流，捕获所有输出
+                    universal_newlines=True,
+                    bufsize=1,
+                    encoding='utf-8',  # 指定UTF-8编码以支持中文路径
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0  # Windows隐藏控制台窗口
+                )
+                
+                # 实时读取stderr来获取进度信息
+                processed_frames = 0
+                start_time = time.time()
+                
+                while True:
+                    if self.stop_processing:
+                        # 用户请求停止处理，终止ffmpeg进程
+                        self.logger.info("用户请求停止转码")
+                        self.current_process.terminate()
+                        try:
+                            self.current_process.wait(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            self.current_process.kill()
+                            self.logger.info("FFmpeg进程已被强制终止")
+                        
+                        # 删除转码过程中生成的临时文件
+                        self.delete_transcoding_temp_files(output_path_with_mp4)
                         return False
                     
-                    # 由于get_video_info函数设置的是GUI变量而不是返回字典，我们需要从变量中获取信息
-                    video_info = {
-                        'resolution': self.video_resolution_var.get(),
-                        'fps': self.video_fps_var.get(),
-                        'duration': self.video_duration_var.get()
-                    }
+                    line = self.current_process.stdout.readline()
                     
-                    # 尝试获取总帧数（如果可用）
-                    try:
-                        # 这里需要通过其他方式获取总帧数，因为get_video_info不直接返回字典
-                        total_frames = self.estimate_total_frames(input_path)
-                    except:
-                        total_frames = 0  # 如果无法估算，则设为0
+                    if not line and self.current_process.poll() is not None:
+                        break
                     
-                    # 更新处理模式为转码
-                    self.processing_mode_var.set("转码")
+                    # 记录所有FFmpeg输出到日志
+                    if line.strip():  # 只记录非空行
+                        self.logger.info(f"FFmpeg输出: {line.strip()}")
                     
-                    # 显示当前正在转码的视频信息
-                    self.root.after(0, lambda: self.current_video_var.set(
-                        f"{os.path.basename(input_path)} | {video_info['resolution']} | {video_info['fps']}fps | {video_info['duration']} | 转码中..."
-                    ))
-                    
-                    # 构建本地FFmpeg命令，按照规范结构组织参数
-                    # 基础硬件加速参数
-                    base_hwaccel_params = ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda']
-                    # 固定编码设置
-                    fixed_encode_params = ['-c:v', 'hevc_nvenc']
-                    # 用户自定义参数（从transcode_params中提取除固定参数外的部分）
-                    custom_params = self.parse_custom_params_for_transcode(transcode_params)
-                    
-                    # 记录参数解析详情
-                    self.logger.info(f"原始转码参数: {transcode_params}")
-                    self.logger.info(f"解析出的自定义参数: {' '.join(custom_params)}")
-                    
-                    # 构建完整的本地FFmpeg命令，确保硬件加速参数在输入文件之前
-                    cmd = [local_ffmpeg] + base_hwaccel_params + ['-i', input_path] + fixed_encode_params + custom_params + ['-c:a', 'copy', output_path_with_mp4]
-                    
-                    self.logger.info(f"使用本地FFmpeg转码: {input_path}")
-                    self.logger.info(f"本地FFmpeg命令: {' '.join(cmd)}")
-                    self.logger.info(f"NVIDIA硬件加速参数: -hwaccel cuda -hwaccel_output_format cuda -c:v hevc_nvenc")
-                    
-                    # 执行转码命令并实时监控进度
-                    self.current_process = subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # 合并输出流，捕获所有输出
-                        universal_newlines=True,
-                        bufsize=1,
-                        encoding='utf-8',  # 指定UTF-8编码以支持中文路径
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0  # Windows隐藏控制台窗口
-                    )
-                    
-                    # 实时读取stderr来获取进度信息
-                    processed_frames = 0
-                    start_time = time.time()
-                    
-                    while True:
-                        if self.stop_processing:
-                            # 用户请求停止处理，终止ffmpeg进程
-                            self.logger.info("用户请求停止转码")
-                            self.current_process.terminate()
+                    # 解析FFmpeg进度信息
+                    # FFmpeg输出格式可能是类似 "frame=  123 fps=..." 的形式
+                    if 'frame=' in line:
+                        # 使用更精确的正则表达式来匹配frame
+                        frame_match = re.search(r'frame=\s*(\d+)', line)
+                        if frame_match:
                             try:
-                                self.current_process.wait(timeout=2)
-                            except subprocess.TimeoutExpired:
-                                self.current_process.kill()
-                                self.logger.info("FFmpeg进程已被强制终止")
+                                frame_num = int(frame_match.group(1))
+                                if frame_num > processed_frames:
+                                    processed_frames = frame_num
+                                    
+                                    # 计算进度百分比
+                                    progress_percent = (processed_frames / total_frames * 100) if total_frames > 0 else 0
+                                    
+                                    # 计算已运行时间和预估剩余时间
+                                    elapsed_time = time.time() - start_time
+                                    fps = processed_frames / elapsed_time if elapsed_time > 0 else 0
+                                    remaining_frames = total_frames - processed_frames
+                                    eta = remaining_frames / fps if fps > 0 else 0
+                                    
+                                    # 格式化时间显示
+                                    elapsed_str = self.format_time(elapsed_time)
+                                    eta_str = self.format_time(eta) if eta > 0 else "未知"
+                                    
+                                    # 更新进度信息显示到各个变量
+                                    self.root.after(0, lambda t=elapsed_str: self.elapsed_time_var.set(t))
+                                    self.root.after(0, lambda t=eta_str: self.remaining_time_var.set(t))
+                                    self.root.after(0, lambda s=fps: self.processing_speed_var.set(f"{s:.2f}fps"))
+                                    self.root.after(0, lambda p=processed_frames: self.processed_frames_var.set(str(p)))
+                                    self.root.after(0, lambda r=total_frames-processed_frames: self.remaining_frames_var.set(str(r)))
+                                    self.root.after(0, lambda t=total_frames: self.total_frames_var.set(str(t)))
+                                    
+                                    # 更新进度条和进度百分比显示
+                                    self.root.after(0, lambda val=progress_percent: self.progress_bar.configure(value=int(val)))
+                                    self.root.after(0, lambda p=progress_percent: self.progress_percent_var.set(f"{int(p)}%"))
+                                    
+                                    # 更新当前视频信息显示进度
+                                    self.root.after(0, lambda: self.current_video_var.set(
+                                        f"{os.path.basename(input_path)} | {video_info['resolution']} | {video_info['fps']}fps | {video_info['duration']} | 转码进度: {progress_percent:.1f}%"
+                                    ))
                             
-                            # 删除转码过程中生成的临时文件
-                            self.delete_transcoding_temp_files(output_path_with_mp4)
-                            return False
-                        
-                        line = self.current_process.stdout.readline()
-                        
-                        if not line and self.current_process.poll() is not None:
-                            break
-                        
-                        # 记录所有FFmpeg输出到日志
-                        if line.strip():  # 只记录非空行
-                            self.logger.info(f"FFmpeg输出: {line.strip()}")
-                        
-                        # 解析FFmpeg进度信息
-                        # FFmpeg输出格式可能是类似 "frame=  123 fps=..." 的形式
-                        if 'frame=' in line:
-                            # 使用更精确的正则表达式来匹配frame
-                            frame_match = re.search(r'frame=\s*(\d+)', line)
-                            if frame_match:
-                                try:
-                                    frame_num = int(frame_match.group(1))
-                                    if frame_num > processed_frames:
-                                        processed_frames = frame_num
-                                        
-                                        # 计算进度百分比
-                                        progress_percent = (processed_frames / total_frames * 100) if total_frames > 0 else 0
-                                        
-                                        # 计算已运行时间和预估剩余时间
-                                        elapsed_time = time.time() - start_time
-                                        fps = processed_frames / elapsed_time if elapsed_time > 0 else 0
-                                        remaining_frames = total_frames - processed_frames
-                                        eta = remaining_frames / fps if fps > 0 else 0
-                                        
-                                        # 格式化时间显示
-                                        elapsed_str = self.format_time(elapsed_time)
-                                        eta_str = self.format_time(eta) if eta > 0 else "未知"
-                                        
-                                        # 更新进度信息显示到各个变量
-                                        self.root.after(0, lambda t=elapsed_str: self.elapsed_time_var.set(t))
-                                        self.root.after(0, lambda t=eta_str: self.remaining_time_var.set(t))
-                                        self.root.after(0, lambda s=fps: self.processing_speed_var.set(f"{s:.2f}fps"))
-                                        self.root.after(0, lambda p=processed_frames: self.processed_frames_var.set(str(p)))
-                                        self.root.after(0, lambda r=total_frames-processed_frames: self.remaining_frames_var.set(str(r)))
-                                        self.root.after(0, lambda t=total_frames: self.total_frames_var.set(str(t)))
-                                        
-                                        # 更新进度条和进度百分比显示
-                                        self.root.after(0, lambda val=progress_percent: self.progress_bar.configure(value=int(val)))
-                                        self.root.after(0, lambda p=progress_percent: self.progress_percent_var.set(f"{int(p)}%"))
-                                        
-                                        # 更新当前视频信息显示进度
-                                        self.root.after(0, lambda: self.current_video_var.set(
-                                            f"{os.path.basename(input_path)} | {video_info['resolution']} | {video_info['fps']}fps | {video_info['duration']} | 转码进度: {progress_percent:.1f}%"
-                                        ))
-                                
-                                except ValueError:
-                                    pass  # 忽略无法解析的帧数
-                    
-                    # 等待进程结束并获取返回码
-                    return_code = self.current_process.wait()
-                    
-                    if return_code == 0 and os.path.exists(output_path_with_mp4) and os.path.getsize(output_path_with_mp4) > 0:
-                        self.logger.info(f"本地FFmpeg转码成功: {output_path_with_mp4}")
-                        return True
-                    else:
+                            except ValueError:
+                                pass  # 忽略无法解析的帧数
+                
+                # 等待进程结束并获取返回码
+                return_code = self.current_process.wait()
+                
+                if return_code == 0 and os.path.exists(output_path_with_mp4) and os.path.getsize(output_path_with_mp4) > 0:
+                    self.logger.info(f"本地FFmpeg转码成功: {output_path_with_mp4}")
+                    return True
+                else:
                         self.logger.error(f"本地FFmpeg转码失败，返回码: {return_code}")
                         self.logger.info(f"本地FFmpeg音频复制模式失败，切换到音频编码模式: {input_path}")
                         # 本地FFmpeg音频复制失败时，使用AAC编码
@@ -5719,9 +6033,6 @@ class JasnaGUI:
                         except Exception as e:
                             self.logger.error(f"本地FFmpeg备用转码过程中出错: {str(e)}")
                             return False
-                else:
-                    self.logger.error("本地ffmpeg.exe也未找到")
-                    return False
             except Exception as e:
                 self.logger.error(f"使用本地FFmpeg转码时出错: {str(e)}")
                 return False
