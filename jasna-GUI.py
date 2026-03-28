@@ -680,9 +680,9 @@ class JasnaGUI:
         
         # 第一行设置 - 使用place布局
         # 1. jasna程序地址
-        jasna_label = ttk.Label(self.settings_frame, text="JASNA程序地址", font=self.normal_font)
+        jasna_label = ttk.Label(self.settings_frame, text="jasna-cli的地址", font=self.normal_font)
         jasna_label.place(x=10, y=0)
-        Tooltip(jasna_label, "A卡不能用\n\n指定JASNA主程序文件的完整路径\n\n例如: D:/jasna-0.5/jasna-cli.exe\n\n本GUI程序可以不与jasna-cli.exe程序放在一起\n放在任何位置都可以正常运行\n只要jasna-cli.exe的命令没有改变\n则此程序可以适用于jasna的不同版本")
+        Tooltip(jasna_label, "A卡不能用\n\n指定jasna-cli主程序文件的完整路径\n\n例如: D:/jasna-0.5/jasna-cli.exe\n\n本GUI程序可以不与jasna-cli.exe程序放在一起\n放在任何位置都可以正常运行\n只要jasna-cli.exe的命令没有改变\n则此程序可以适用于jasna的不同版本")
         
         self.jasna_path_var = tk.StringVar()
         self.jasna_path_entry = ttk.Entry(self.settings_frame, textvariable=self.jasna_path_var, width=30, font=self.normal_font)
