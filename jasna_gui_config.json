@@ -1,9 +1,9 @@
 {
-    "jasna_path": "E:/AI/jasna-0.5.0-alpha6/jasna-cli.exe",
+    "jasna_path": "E:/AI/jasna-0.6-alpha3/jasna-cli.exe",
     "input_folder": "G:/Lada-data/jasna-未处理",
     "output_folder": "E:/AI/lada-output",
     "slice_frames_1": "100",
-    "slice_frames_2": "100",
+    "slice_frames_2": "160",
     "encode_params": "preset=P7,tuning_info=high_quality,rc=vbr,cq=31,aq=1,temporalaq=0,lookahead=32,gop=300",
     "transcode_params": "-preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k",
     "output_suffix": "-U",
