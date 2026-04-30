@@ -44,3 +44,9 @@ dist/
 
 # Project specific
 .trae/
+
+# User config file (contains user-specific paths)
+jasna_gui_config.json
+
+# Program architecture document
+程序架构.md
