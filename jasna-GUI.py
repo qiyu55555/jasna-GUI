@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v6.0  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
+        self.root.title("JASNA视频处理工具-v6.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
         self.root.geometry("1170x1005")  # 窗口高度增加15像素
         
         # 设置窗口图标
@@ -1104,7 +1104,7 @@ class JasnaGUI:
         
         realtime_btn = ttk.Button(self.button_frame, text="实时播放", command=self.start_realtime_playback, style="TButton")
         realtime_btn.place(x=665, y=10, width=100, height=35)
-        Tooltip(realtime_btn, "启动jasna-cli实时播放模式\n使用当前设置的检测模型和阈值参数\n在工作目录中运行jasna-cli.exe --stream命令")
+        Tooltip(realtime_btn, "启动jasna-cli实时播放模式\n使用当前设置的参数运行实时视频处理")
         
         save_btn = ttk.Button(self.button_frame, text="保存设置", command=self.save_settings, style="TButton")
         save_btn.place(x=795, y=10, width=100, height=35)
@@ -5264,54 +5264,48 @@ class JasnaGUI:
         import os
         import subprocess
         
-        # 获取jasna-cli的地址
         jasna_path = self.jasna_path_var.get().strip()
         if not jasna_path:
-            messagebox.showerror("错误", "请先设置jasna-cli的地址！")
+            self.show_custom_messagebox("error", "错误", "请先设置jasna-cli的地址")
             return
         
-        # 检查文件是否存在
+        jasna_path = jasna_path.replace("/", "\\")
         if not os.path.exists(jasna_path):
-            messagebox.showerror("错误", f"jasna-cli文件不存在：\n{jasna_path}")
+            self.show_custom_messagebox("error", "错误", f"jasna-cli程序不存在:\n{jasna_path}")
             return
         
-        # 获取工作目录（去掉最后的jasna-cli.exe）
         jasna_dir = os.path.dirname(jasna_path)
         jasna_exe_name = os.path.basename(jasna_path)
         
-        # 获取4K切片帧数
         slice_frames_4k = self.slice_frames_var2.get().strip()
-        if not slice_frames_4k:
-            slice_frames_4k = "30"
-        
-        # 获取检测模型
-        detection_model = self.detection_model_var.get().strip()
-        if not detection_model:
-            detection_model = "lada-yolo-v4"
-        
-        # 获取检测阈值
+        detection_model = self.detection_model_var.get()
         detection_threshold = self.detection_threshold_var.get().strip()
-        if not detection_threshold:
-            detection_threshold = "0.20"
         
-        # 构建命令
-        cmd = f'.\\{jasna_exe_name} --stream --max-clip-size {slice_frames_4k} --temporal-overlap 8 --detection-model {detection_model} --detection-score-threshold {detection_threshold}'
+        cmd = f'.\\{jasna_exe_name} --stream --max-clip-size {slice_frames_4k} --temporal-overlap 8 --detection-model {detection_model} --detection-score-threshold {detection_threshold} --log-level info'
         
-        # 更新状态
-        self.status_var.set(f"正在启动实时播放模式...")
+        secondary_fix_software = self.secondary_fix_var.get()
+        if secondary_fix_software == "RTX-SR":
+            rtx_scale = self.rtx_sr_scale_var.get().replace("X", "")
+            rtx_quality = self.translate_rtx_option_to_english(self.rtx_sr_quality_var.get())
+            rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
+            rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
+            cmd += f' --secondary-restoration rtx-super-res --rtx-scale {rtx_scale} --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur}'
+        
+        self.logger.info(f"启动实时播放模式，工作目录: {jasna_dir}")
+        self.logger.info(f"执行命令: {cmd}")
+        self.status_var.set("正在运行实时播放模式...")
         
         try:
-            # 在工作目录中启动jasna-cli
-            subprocess.Popen(
+            if subprocess.Popen(
                 cmd,
-                cwd=jasna_dir,
                 shell=True,
+                cwd=jasna_dir,
                 creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
-            self.status_var.set(f"实时播放模式已启动")
+            ):
+                self.logger.info("实时播放模式已启动")
         except Exception as e:
-            messagebox.showerror("错误", f"启动实时播放失败：\n{str(e)}")
-            self.status_var.set("启动实时播放失败")
+            self.logger.error(f"启动实时播放模式失败: {str(e)}")
+            self.show_custom_messagebox("error", "错误", f"启动实时播放模式失败:\n{str(e)}")
     
     def clear_lists(self, clear_summary=True):
         """清空所有列表"""

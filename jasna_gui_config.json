@@ -1,5 +1,5 @@
 {
-    "jasna_path": "E:/AI/jasna-0.6-alpha3/jasna-cli.exe",
+    "jasna_path": "E:/AI/jasna-0.6-alpha4/jasna-cli.exe",
     "input_folder": "G:/Lada-data/jasna-未处理",
     "output_folder": "E:/AI/lada-output",
     "slice_frames_1": "100",
@@ -22,7 +22,7 @@
     ],
     "detection_model": "lada-yolo-v4",
     "detection_threshold": "0.20",
-    "secondary_fix": "无",
+    "secondary_fix": "RTX-SR",
     "ffmpeg_path": "",
     "tvai_model": "iris-2",
     "tvai_scale": "4",
