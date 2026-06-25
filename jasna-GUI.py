@@ -3590,10 +3590,10 @@ class JasnaGUI:
                 # 如果仍有视频未处理，等待用户操作
                 self.root.after(0, lambda: self.status_var.set("处理完成，仍有视频未处理"))
             
-            # 只有在不是用户停止的情况下，才强制终止所有jasna.exe进程
+            # 只有在不是用户停止的情况下，才强制终止所有jasna进程（进程名由用户配置决定）
             if not self.stop_processing:
-                # 处理完成后强制终止所有jasna.exe进程
-                self.logger.info("处理完成，强制终止所有jasna.exe进程")
+                # 处理完成后强制终止所有jasna进程
+                self.logger.info(f"处理完成，强制终止所有{self.get_jasna_exe_name()}进程")
                 self.kill_all_jasna_processes()
             
             # 在所有处理完成后清空日志文件
@@ -3615,12 +3615,12 @@ class JasnaGUI:
                 self.stuck_seconds_var.set(self.original_stuck_seconds)
                 self.logger.info(f"恢复卡死超时时间至原始值: {self.original_stuck_seconds}")
             
-            # 异常情况下也强制终止所有jasna.exe进程
+            # 异常情况下也强制终止所有jasna进程（进程名由用户配置决定）
             try:
-                self.logger.info("异常情况，强制终止所有jasna.exe进程")
+                self.logger.info(f"异常情况，强制终止所有{self.get_jasna_exe_name()}进程")
                 self.kill_all_jasna_processes()
             except Exception as e:
-                self.logger.error(f"异常情况下终止jasna.exe进程时出错: {str(e)}")
+                self.logger.error(f"异常情况下终止{self.get_jasna_exe_name()}进程时出错: {str(e)}")
             
             # 在异常处理的finally块中也要清空日志文件
             self.clear_log_file()
@@ -4222,7 +4222,7 @@ class JasnaGUI:
                     except subprocess.TimeoutExpired:
                         # 如果进程未终止，尝试强制终止
                         if self.current_process.poll() is None:
-                            # 使用多种方法强制终止所有jasna.exe进程
+                            # 使用多种方法强制终止所有jasna进程（进程名由用户配置决定）
                             self.kill_all_jasna_processes()
             except Exception as e:
                 self.logger.error(f"终止JASNA进程时出错（卡死检测）: {str(e)}")
@@ -5221,11 +5221,11 @@ class JasnaGUI:
                     except subprocess.TimeoutExpired:
                         # 如果进程未终止，尝试强制终止
                         if self.current_process.poll() is None:
-                            # 使用多种方法强制终止所有jasna.exe进程
+                            # 使用多种方法强制终止所有jasna进程（进程名由用户配置决定）
                             self.kill_all_jasna_processes()
                 
-                # 无论current_process是否终止，都强制终止所有jasna.exe进程
-                self.logger.info("强制终止所有jasna.exe进程（停止按钮）")
+                # 无论current_process是否终止，都强制终止所有jasna进程（进程名由用户配置决定）
+                self.logger.info(f"强制终止所有{self.get_jasna_exe_name()}进程（停止按钮）")
                 self.kill_all_jasna_processes()
             except Exception as e:
                 self.logger.error(f"终止JASNA进程时出错（停止按钮）: {str(e)}")
@@ -5499,7 +5499,7 @@ class JasnaGUI:
                             self.current_process.wait(timeout=2)
                         except subprocess.TimeoutExpired:
                             if self.current_process.poll() is None:
-                                # 使用多种方法强制终止所有jasna.exe进程
+                                # 使用多种方法强制终止所有jasna进程（进程名由用户配置决定）
                                 self.kill_all_jasna_processes()
                 except Exception as e:
                     self.logger.error(f"终止JASNA进程时出错（窗口关闭）: {str(e)}")
