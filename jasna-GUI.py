@@ -428,6 +428,10 @@ class JasnaGUI:
         # VR模式
         self.vr_mode_var = tk.StringVar(value="关闭")
         
+        # JASNA激活信息
+        self.license_email_var = tk.StringVar(value="")
+        self.license_key_var = tk.StringVar(value="")
+        
         # 配置文件路径
         self.config_file = "jasna_gui_config.json"
         
@@ -889,10 +893,10 @@ class JasnaGUI:
         # 二次修复主模块组件
         secondary_fix_label = ttk.Label(self.secondary_fix_frame, text="使用软件", font=self.normal_font)
         secondary_fix_label.place(x=10, y=10)
-        Tooltip(secondary_fix_label, "选择二次修复使用的软件\n\n无：不使用任何二次修复软件\nTVAI：使用Topaz Video AI进行二次修复\nRTX-SR：使用NVIDIA RTX Super Resolution进行超分辨率修复\n\n默认值为\"无\"\n\n如果要使用的话作者K佬是推荐使用RTX-SR的")
+        Tooltip(secondary_fix_label, "选择二次修复使用的软件\n\n无：不使用任何二次修复软件\nRTX-SR：使用NVIDIA RTX Super Resolution进行超分辨率修复\nunet-4x：使用UNet-4x模型进行超分辨率修复（需要激活）\n\n默认值为\"无\"\n\n如果要使用的话作者K佬是推荐使用RTX-SR的")
         
         # 二次修复选项 - 使用自定义按钮实现，避免下拉箭头
-        secondary_fix_options = ["无", "RTX-SR"]
+        secondary_fix_options = ["无", "RTX-SR", "unet-4x"]
         self.secondary_fix_current_option_index = 0  # 当前选项索引
         
         # 创建一个带有内凹效果的自定义按钮
@@ -908,7 +912,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.secondary_fix_button.place(x=100, y=10, width=95, height=30)
+        self.secondary_fix_button.place(x=10, y=40, width=95, height=30)
         
         # 初始化显示
         self.secondary_fix_var.set(secondary_fix_options[0])
@@ -924,7 +928,7 @@ class JasnaGUI:
         
         # RTX-SR详细设置子模块
         self.rtx_sr_frame = ttk.LabelFrame(self.secondary_fix_frame, text="RTX-SR详细设置", padding=(10, 20, 10, 10))
-        self.rtx_sr_frame.place(x=350, y=0, width=435, height=100)
+        self.rtx_sr_frame.place(x=140, y=0, width=435, height=100)
         self.rtx_sr_frame.configure(style="LeftAligned.TLabelframe")
 
         # RTX-SR缩放
@@ -1046,6 +1050,27 @@ class JasnaGUI:
             def make_command(opt):
                 return lambda: self.select_rtx_sr_deblur_option(opt)
             self.rtx_sr_deblur_menu.add_command(label=option, command=make_command(option))
+        
+        # JASNA激活模块
+        self.license_frame = ttk.LabelFrame(self.secondary_fix_frame, text="JASNA激活", padding=(10, 20, 10, 10))
+        self.license_frame.place(x=610, y=0, width=500, height=100)
+        self.license_frame.configure(style="LeftAligned.TLabelframe")
+        
+        # 邮箱
+        email_label = ttk.Label(self.license_frame, text="邮箱", font=self.normal_font)
+        email_label.place(x=0, y=0, width=40)
+        Tooltip(email_label, "JASNA激活邮箱\n\n用于unet-4x模型的激活验证")
+        
+        self.email_entry = ttk.Entry(self.license_frame, textvariable=self.license_email_var, font=self.normal_font)
+        self.email_entry.place(x=40, y=0, width=190, height=30)
+        
+        # 密钥（与邮箱同行显示）
+        key_label = ttk.Label(self.license_frame, text="密钥", font=self.normal_font)
+        key_label.place(x=240, y=0, width=40)
+        Tooltip(key_label, "JASNA激活密钥\n\n用于unet-4x模型的激活验证")
+        
+        self.key_entry = ttk.Entry(self.license_frame, textvariable=self.license_key_var, font=self.normal_font)
+        self.key_entry.place(x=280, y=0, width=190, height=30)
         
         # 控制按钮区域 - 使用place布局
         self.button_frame = ttk.Frame(self.root)
@@ -1569,6 +1594,9 @@ class JasnaGUI:
             "detection_threshold": self.detection_threshold_var.get(),  # 检测阈值
             # VR模式设置
             "vr_mode": self.vr_mode_var.get(),
+            # JASNA激活信息
+            "license_email": self.license_email_var.get(),
+            "license_key": self.license_key_var.get(),
             # 二次修复相关设置
             "secondary_fix": self.secondary_fix_var.get(),
             "ffmpeg_path": self.ffmpeg_path_var.get(),
@@ -1634,6 +1662,9 @@ class JasnaGUI:
                 self._detection_threshold_last_value = self.detection_threshold_var.get()
                 # 加载VR模式设置
                 self.vr_mode_var.set(settings.get("vr_mode", "关闭"))
+                # 加载JASNA激活信息
+                self.license_email_var.set(settings.get("license_email", ""))
+                self.license_key_var.set(settings.get("license_key", ""))
                 
                 # 加载二次修复相关设置
                 self.secondary_fix_var.set(settings.get("secondary_fix", "无"))
@@ -2518,6 +2549,8 @@ class JasnaGUI:
                                     rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
                                     rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                                     cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+                                elif secondary_fix_option == "unet-4x":
+                                    cmd += f' --secondary-restoration unet-4x --license-email {self.license_email_var.get()} --license-key {self.license_key_var.get()}'
 
                                 # 添加VR模式参数
                                 vr_mode = self.vr_mode_var.get()
@@ -2915,6 +2948,8 @@ class JasnaGUI:
                     rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
                     rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                     cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+                elif secondary_fix_option == "unet-4x":
+                    cmd += f' --secondary-restoration unet-4x --license-email {self.license_email_var.get()} --license-key {self.license_key_var.get()}'
 
                 # 添加VR模式参数
                 vr_mode = self.vr_mode_var.get()
@@ -3336,6 +3371,8 @@ class JasnaGUI:
                                         rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
                                         rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                                         cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+                                    elif secondary_fix_option == "unet-4x":
+                                        cmd += f' --secondary-restoration unet-4x --license-email {self.license_email_var.get()} --license-key {self.license_key_var.get()}'
 
                                     # 添加VR模式参数
                                     vr_mode = self.vr_mode_var.get()
@@ -3926,6 +3963,8 @@ class JasnaGUI:
                             rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
                             rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                             cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+                        elif secondary_fix_option == "unet-4x":
+                            cmd += f' --secondary-restoration unet-4x --license-email {self.license_email_var.get()} --license-key {self.license_key_var.get()}'
 
                         # 添加VR模式参数
                         vr_mode = self.vr_mode_var.get()
@@ -5384,6 +5423,8 @@ class JasnaGUI:
             rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
             rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
             cmd += f' --secondary-restoration rtx-super-res --rtx-scale {rtx_scale} --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur}'
+        elif secondary_fix_software == "unet-4x":
+            cmd += f' --secondary-restoration unet-4x --license-email {self.license_email_var.get()} --license-key {self.license_key_var.get()}'
         
         # 添加VR模式参数
         vr_mode = self.vr_mode_var.get()
