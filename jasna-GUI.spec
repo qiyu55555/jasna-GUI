@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='jasna-GUI-v6.1',
+    name='jasna-GUI-v9.1',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

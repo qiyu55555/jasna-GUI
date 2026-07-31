@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v6.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
+        self.root.title("JASNA视频处理工具-v9.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
         self.root.geometry("1170x1005")  # 窗口高度增加15像素
         
         # 设置窗口图标
@@ -424,6 +424,9 @@ class JasnaGUI:
         
         # 处理状态（破解或转码）
         self.processing_mode_var = tk.StringVar(value="破解")
+        
+        # VR模式
+        self.vr_mode_var = tk.StringVar(value="关闭")
         
         # 配置文件路径
         self.config_file = "jasna_gui_config.json"
@@ -780,7 +783,7 @@ class JasnaGUI:
         encode_label.place(x=10, y=120)
         Tooltip(encode_label, "自定义视频编码参数\n\n此参数决定最后成品视频的质量和文件体积\n\n格式: 参数1=值1,参数2=值2,...\n\n其中cq的值主要影响视频质量\ncq值越小\n视频质量越高\n文件体积也越大\n默认值: 31\n\n默认参数适用于大多数情况")
         
-        self.encode_params_var = tk.StringVar(value='preset=P7,tuning_info=high_quality,rc=vbr,cq=31,aq=1,temporalaq=0,lookahead=32,gop=300')
+        self.encode_params_var = tk.StringVar(value='preset=p7,tune=hq,profile=main10,tier=high,rc=vbr,cq=31,rc-lookahead=32,temporal-aq=1,spatial_aq=0,bf=3,b_ref_mode=middle,g=300')
         self.encode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.encode_params_var, width=53, font=self.normal_font)
         self.encode_params_entry.place(x=140, y=120, width=980)
         
@@ -791,16 +794,16 @@ class JasnaGUI:
         
         self.transcode_params_var = tk.StringVar(value='-preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k')
         self.transcode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.transcode_params_var, width=53, font=self.normal_font)
-        self.transcode_params_entry.place(x=140, y=160, width=530)
+        self.transcode_params_entry.place(x=140, y=160, width=440)
         
         # 检测模型选择
         detection_model_label = ttk.Label(self.settings_frame, text="检测模型", font=self.normal_font)
-        detection_model_label.place(x=710, y=160, width=80, height=30)
-        Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: lada-yolo-v4\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v5: 最新版本的RFDetr模型\nrfdetr-v4: RFDetr模型v4版本\nlada-yolo-v4: 最新版本的Lada-YOLO模型，也就是lada-v4f模型\nrfdetr-v3: RFDetr模型v3版本，也就是jasna-v3检测模型\nlada-yolo-v2: 旧版本的Lada-YOLO模型，也就是lada-v2模型''')
+        detection_model_label.place(x=600, y=160, width=80, height=30)
+        Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: rfdetr-v6\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v6: 最新版本的RFDetr模型\nrfdetr-v6-large: RFDetr模型的large大模型版本\nlada-yolo-v4: 最新版本的Lada-YOLO模型\nrfdetr-v5: RFDetr模型v5版本\nrfdetr-vr-v1: RFDetr的VR专用模型''')
 
         # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
-        detection_model_options = ["rfdetr-v5", "rfdetr-v4", "lada-yolo-v4", "rfdetr-v3", "lada-yolo-v2"]
-        self.detection_model_current_option_index = 2  # 当前选项索引，默认lada-yolo-v4
+        detection_model_options = ["rfdetr-v6", "rfdetr-v6-large", "lada-yolo-v4", "rfdetr-v5", "rfdetr-vr-v1"]
+        self.detection_model_current_option_index = 0  # 当前选项索引，默认rfdetr-v6
         
         # 确保detection_model_var被正确初始化
         if not hasattr(self, 'detection_model_var') or self.detection_model_var is None:
@@ -819,10 +822,10 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.detection_model_button.place(x=790, y=160, width=180, height=30)
+        self.detection_model_button.place(x=680, y=160, width=160, height=30)
         
-        # 初始化显示，默认使用lada-yolo-v4
-        self.detection_model_var.set(detection_model_options[2])
+        # 初始化显示，默认使用rfdetr-v6
+        self.detection_model_var.set(detection_model_options[0])
         self.detection_model_options_list = detection_model_options
         
         # 创建右键菜单
@@ -832,6 +835,38 @@ class JasnaGUI:
             def make_command(opt):
                 return lambda: self.select_detection_model_option(opt)
             self.detection_model_menu.add_command(label=option, command=make_command(option))
+        
+        # VR模式选择
+        vr_mode_label = ttk.Label(self.settings_frame, text="VR", font=self.normal_font)
+        vr_mode_label.place(x=860, y=160, width=30, height=30)
+        Tooltip(vr_mode_label, "选择VR处理模式\n\n关闭：不添加任何VR参数\n自动：添加 --vr-mode auto 参数\nSBS：添加 --vr-mode sbs 参数\n鱼眼：添加 --vr-mode sbs-fisheye 参数\n\n默认值为\"关闭\"")
+        
+        vr_mode_options = ["关闭", "自动", "SBS", "鱼眼"]
+        self.vr_mode_current_option_index = 0  # 当前选项索引，默认关闭
+        
+        self.vr_mode_button = tk.Button(
+            self.settings_frame, 
+            textvariable=self.vr_mode_var,
+            command=self.show_vr_mode_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.vr_mode_button.place(x=890, y=160, width=80, height=30)
+        
+        self.vr_mode_var.set(vr_mode_options[0])
+        self.vr_mode_options_list = vr_mode_options
+        
+        # 创建VR模式右键菜单
+        self.vr_mode_menu = tk.Menu(self.root, tearoff=0)
+        for option in vr_mode_options:
+            def make_vr_command(opt):
+                return lambda: self.select_vr_mode_option(opt)
+            self.vr_mode_menu.add_command(label=option, command=make_vr_command(option))
         
         # 检测阈值
         detection_threshold_label = ttk.Label(self.settings_frame, text="检测阈值", font=self.normal_font)
@@ -1532,6 +1567,8 @@ class JasnaGUI:
             # 检测模型设置
             "detection_model": self.detection_model_var.get(),  # 新增检测模型
             "detection_threshold": self.detection_threshold_var.get(),  # 检测阈值
+            # VR模式设置
+            "vr_mode": self.vr_mode_var.get(),
             # 二次修复相关设置
             "secondary_fix": self.secondary_fix_var.get(),
             "ffmpeg_path": self.ffmpeg_path_var.get(),
@@ -1578,7 +1615,7 @@ class JasnaGUI:
                 self.output_folder_var.set(settings.get("output_folder", ""))
                 self.slice_frames_var1.set(settings.get("slice_frames_1", "30"))
                 self.slice_frames_var2.set(settings.get("slice_frames_2", "30"))
-                self.encode_params_var.set(settings.get("encode_params", "preset=P7,tuning_info=high_quality,rc=vbr,cq=32,aq=1,temporalaq=0,lookahead=32,gop=300"))
+                self.encode_params_var.set(settings.get("encode_params", "preset=p7,tune=hq,profile=main10,tier=high,rc=vbr,cq=31,rc-lookahead=32,temporal-aq=1,spatial_aq=0,bf=3,b_ref_mode=middle,g=300"))
                 self.transcode_params_var.set(settings.get("transcode_params", "-hwaccel cuda -hwaccel_output_format cuda -c:v hevc_nvenc -preset p5 -tune hq -rc constqp -qp 15 -qp_cb_offset -2 -qp_cr_offset -2 -spatial_aq 1 -aq-strength 1 -c:a aac -b:a 128k"))  # 新增转码参数
                 self.output_suffix_var.set(settings.get("output_suffix", "-U"))
                 self.stuck_seconds_var.set(settings.get("stuck_seconds", "300"))  # 改为秒，默认300秒（5分钟）
@@ -1591,10 +1628,12 @@ class JasnaGUI:
                 self.detection_model_history = settings.get("detection_model_history", [])
                 
                 # 加载检测模型设置
-                self.detection_model_var.set(settings.get("detection_model", "lada-yolo-v4"))  # 新增检测模型，默认lada-yolo-v4
+                self.detection_model_var.set(settings.get("detection_model", "rfdetr-v6"))  # 新增检测模型，默认rfdetr-v6
                 self.detection_threshold_var.set(settings.get("detection_threshold", "0.20"))  # 检测阈值，默认0.20
                 # 更新检测阈值的上次值，避免加载配置后触发弹窗
                 self._detection_threshold_last_value = self.detection_threshold_var.get()
+                # 加载VR模式设置
+                self.vr_mode_var.set(settings.get("vr_mode", "关闭"))
                 
                 # 加载二次修复相关设置
                 self.secondary_fix_var.set(settings.get("secondary_fix", "无"))
@@ -2480,6 +2519,15 @@ class JasnaGUI:
                                     rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                                     cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
 
+                                # 添加VR模式参数
+                                vr_mode = self.vr_mode_var.get()
+                                if vr_mode == "自动":
+                                    cmd += ' --vr-mode auto'
+                                elif vr_mode == "SBS":
+                                    cmd += ' --vr-mode sbs'
+                                elif vr_mode == "鱼眼":
+                                    cmd += ' --vr-mode sbs-fisheye'
+
                                 self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
                                 self.logger.info(f"完整命令: {cmd}")
                                 self.logger.info(f"工作目录: {jasna_dir}")
@@ -2542,8 +2590,8 @@ class JasnaGUI:
                                         # 不将当前切片帧数添加到历史记录，直接跳出
                                         continue
                                     
-                                    # 执行卡死处理流程
-                                    self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder)
+                                    # 执行卡死处理流程（已转码重试，标记is_retry=True）
+                                    self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder, is_retry=True)
                                     
                                     # 检查是否用户请求停止处理
                                     if self.stop_processing:
@@ -2867,6 +2915,15 @@ class JasnaGUI:
                     rtx_denoise = self.translate_rtx_option_to_english(self.rtx_sr_denoise_var.get())
                     rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                     cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
+
+                # 添加VR模式参数
+                vr_mode = self.vr_mode_var.get()
+                if vr_mode == "自动":
+                    cmd += ' --vr-mode auto'
+                elif vr_mode == "SBS":
+                    cmd += ' --vr-mode sbs'
+                elif vr_mode == "鱼眼":
+                    cmd += ' --vr-mode sbs-fisheye'
 
                 self.logger.info(f"开始处理视频: {video_file}")
                 self.logger.info(f"完整命令: {cmd}")
@@ -3280,6 +3337,15 @@ class JasnaGUI:
                                         rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                                         cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
 
+                                    # 添加VR模式参数
+                                    vr_mode = self.vr_mode_var.get()
+                                    if vr_mode == "自动":
+                                        cmd += ' --vr-mode auto'
+                                    elif vr_mode == "SBS":
+                                        cmd += ' --vr-mode sbs'
+                                    elif vr_mode == "鱼眼":
+                                        cmd += ' --vr-mode sbs-fisheye'
+
                                     self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
                                     self.logger.info(f"完整命令: {cmd}")
                                     self.logger.info(f"工作目录: {jasna_dir}")
@@ -3342,8 +3408,8 @@ class JasnaGUI:
                                             # 不将当前切片帧数添加到历史记录，直接跳出整个处理循环
                                             break  # 终止所有后续视频处理任务
                                         
-                                        # 执行卡死处理流程
-                                        self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder)
+                                        # 执行卡死处理流程（已转码重试，标记is_retry=True）
+                                        self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder, is_retry=True)
                                         
                                         # 重置当前处理视频
                                         self.currently_processing = None
@@ -3643,8 +3709,12 @@ class JasnaGUI:
             self.logger.error(f"检查最终文件时出错: {str(e)}")
             return False
     
-    def handle_stuck_video(self, video_file, input_path, video_name, suffix, output_folder):
-        """处理卡死的视频"""
+    def handle_stuck_video(self, video_file, input_path, video_name, suffix, output_folder, is_retry=False):
+        """处理卡死的视频
+        
+        参数:
+            is_retry: 是否是转码后的重试调用。如果为True，转码后的视频再次卡死时不再递归，直接标记失败。
+        """
         try:
             self.logger.warning(f"开始处理卡死视频: {video_file}")
             
@@ -3857,6 +3927,15 @@ class JasnaGUI:
                             rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
                             cmd += f' --secondary-restoration rtx-super-res --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur} --rtx-scale {rtx_scale}'
 
+                        # 添加VR模式参数
+                        vr_mode = self.vr_mode_var.get()
+                        if vr_mode == "自动":
+                            cmd += ' --vr-mode auto'
+                        elif vr_mode == "SBS":
+                            cmd += ' --vr-mode sbs'
+                        elif vr_mode == "鱼眼":
+                            cmd += ' --vr-mode sbs-fisheye'
+
                         self.logger.info(f"开始处理转码后的视频: {transcoded_video_name}")
                         self.logger.info(f"完整命令: {cmd}")
                         self.logger.info(f"工作目录: {jasna_dir}")
@@ -3920,7 +3999,12 @@ class JasnaGUI:
                                 return
                             
                             # 执行卡死处理流程
-                            self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder)
+                            if is_retry:
+                                # 已经是转码重试后的再次卡死，不再递归，直接标记为处理失败
+                                self.logger.error(f"转码后视频再次卡死，不再重试: {transcoded_video_name}")
+                                self.root.after(0, lambda: self.status_var.set(f"转码后视频处理失败: {transcoded_video_name}"))
+                            else:
+                                self.handle_stuck_video(transcoded_video_name, transcoded_input_path, transcoded_video_name_only, suffix, output_folder, is_retry=True)
                             
                             # 重置当前处理视频
                             self.currently_processing = None
@@ -4922,6 +5006,16 @@ class JasnaGUI:
         """选择检测模型选项"""
         self.detection_model_var.set(option)
     
+    def show_vr_mode_menu(self, event=None):
+        """显示VR模式选项菜单"""
+        x = self.vr_mode_button.winfo_rootx()
+        y = self.vr_mode_button.winfo_rooty() + self.vr_mode_button.winfo_height()
+        self.vr_mode_menu.post(x, y)
+    
+    def select_vr_mode_option(self, option):
+        """选择VR模式选项"""
+        self.vr_mode_var.set(option)
+    
     def on_detection_threshold_focus_out(self, event=None):
         """检测阈值输入框失去焦点时的回调函数，弹窗提示用户
         
@@ -5291,6 +5385,15 @@ class JasnaGUI:
             rtx_deblur = self.translate_rtx_option_to_english(self.rtx_sr_deblur_var.get())
             cmd += f' --secondary-restoration rtx-super-res --rtx-scale {rtx_scale} --rtx-quality {rtx_quality} --rtx-denoise {rtx_denoise} --rtx-deblur {rtx_deblur}'
         
+        # 添加VR模式参数
+        vr_mode = self.vr_mode_var.get()
+        if vr_mode == "自动":
+            cmd += ' --vr-mode auto'
+        elif vr_mode == "SBS":
+            cmd += ' --vr-mode sbs'
+        elif vr_mode == "鱼眼":
+            cmd += ' --vr-mode sbs-fisheye'
+        
         self.logger.info(f"启动实时播放模式，工作目录: {jasna_dir}")
         self.logger.info(f"执行命令: {cmd}")
         self.status_var.set("正在运行实时播放模式...")
@@ -5512,11 +5615,16 @@ class JasnaGUI:
     def get_jasna_ffmpeg_path(self):
         r"""获取JASNA程序目录下的ffmpeg.exe路径
         
-        从jasna_path_var中提取JASNA程序所在目录，然后拼接 _internal\tools\ffmpeg.exe
-        例如: E:\AI\jasna-0.5.0-alpha6\jasna-cli.exe -> E:\AI\jasna-0.5.0-alpha6\_internal\tools\ffmpeg.exe
+        从jasna_path_var中提取JASNA程序所在目录，按优先级查找ffmpeg.exe:
+        1. JASNA目录\tools\ffmpeg.exe
+        2. JASNA目录\_internal\tools\ffmpeg.exe
+        
+        例如: E:\AI\jasna-0.5.0-alpha6\jasna-cli.exe -> 
+              优先查找: E:\AI\jasna-0.5.0-alpha6\tools\ffmpeg.exe
+              其次查找: E:\AI\jasna-0.5.0-alpha6\_internal\tools\ffmpeg.exe
         
         Returns:
-            str: ffmpeg.exe的完整路径，如果JASNA路径未设置或ffmpeg不存在则返回None
+            str: ffmpeg.exe的完整路径，如果都不存在则返回None
         """
         jasna_path = self.jasna_path_var.get()
         if not jasna_path:
@@ -5527,10 +5635,13 @@ class JasnaGUI:
         if not jasna_dir:
             return None
         
-        # 构建ffmpeg路径: JASNA目录\_internal\tools\ffmpeg.exe
-        ffmpeg_path = os.path.join(jasna_dir, '_internal', 'tools', 'ffmpeg.exe')
+        # 优先级1: JASNA目录\tools\ffmpeg.exe
+        ffmpeg_path = os.path.join(jasna_dir, 'tools', 'ffmpeg.exe')
+        if os.path.exists(ffmpeg_path):
+            return ffmpeg_path
         
-        # 检查ffmpeg是否存在
+        # 优先级2: JASNA目录\_internal\tools\ffmpeg.exe
+        ffmpeg_path = os.path.join(jasna_dir, '_internal', 'tools', 'ffmpeg.exe')
         if os.path.exists(ffmpeg_path):
             return ffmpeg_path
         
