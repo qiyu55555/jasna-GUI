@@ -335,7 +335,7 @@ class StuckMonitorThread:
 class JasnaGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("JASNA视频处理工具-v9.1  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
+        self.root.title("JASNA视频处理工具-v9.2  （ 作者：旗鱼 ）                                             jasna和lada均为免费开源软件     中文交流QQ群：1083672873")
         self.root.geometry("1170x1005")  # 窗口高度增加15像素
         
         # 设置窗口图标
@@ -431,6 +431,10 @@ class JasnaGUI:
         # JASNA激活信息
         self.license_email_var = tk.StringVar(value="")
         self.license_key_var = tk.StringVar(value="")
+        # 4K检测模型
+        self.detection_model_4k_var = tk.StringVar()
+        # 编码器选择
+        self.codec_var = tk.StringVar(value="hevc")
         
         # 配置文件路径
         self.config_file = "jasna_gui_config.json"
@@ -670,7 +674,7 @@ class JasnaGUI:
         
         # 自定义设置部分框架
         self.settings_frame = ttk.LabelFrame(self.root, text="自定义设置", padding="10")
-        self.settings_frame.place(x=10, y=10, width=1150, height=240)
+        self.settings_frame.place(x=10, y=10, width=1150, height=280)
         
         # 设置标题字体
         style = ttk.Style()
@@ -798,55 +802,112 @@ class JasnaGUI:
         
         self.transcode_params_var = tk.StringVar(value='-preset p5 -tune hq -rc constqp -qp 15 -c:a aac -b:a 256k')
         self.transcode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.transcode_params_var, width=53, font=self.normal_font)
-        self.transcode_params_entry.place(x=140, y=160, width=440)
+        self.transcode_params_entry.place(x=140, y=160, width=980)
+        
+        # 第五行设置 - 编码器、检测模型、VR、检测阈值
+        # 编码器选择
+        encoder_label = ttk.Label(self.settings_frame, text="编码器", font=self.normal_font)
+        encoder_label.place(x=140, y=200)
+        Tooltip(encoder_label, "选择视频编码器\n\nhevc: 使用H.265/HEVC编码器\nav1: 使用AV1编码器\nh264: 使用H.264/AVC编码器\n\n默认值: hevc")
+        
+        encoder_options = ["hevc", "av1", "h264"]
+        self.encoder_current_option_index = 0
+        
+        self.encoder_button = tk.Button(
+            self.settings_frame,
+            textvariable=self.codec_var,
+            command=self.show_encoder_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.encoder_button.place(x=210, y=200, width=90, height=30)
+        
+        self.codec_var.set(encoder_options[0])
+        self.encoder_options_list = encoder_options
+        
+        # 创建编码器右键菜单
+        self.encoder_menu = tk.Menu(self.root, tearoff=0)
+        for option in encoder_options:
+            def make_encoder_command(opt):
+                return lambda: self.select_encoder_option(opt)
+            self.encoder_menu.add_command(label=option, command=make_encoder_command(option))
         
         # 检测模型选择
         detection_model_label = ttk.Label(self.settings_frame, text="检测模型", font=self.normal_font)
-        detection_model_label.place(x=600, y=160, width=80, height=30)
-        Tooltip(detection_model_label, '''选择使用的检测模型\n\n默认值: rfdetr-v6\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v6: 最新版本的RFDetr模型\nrfdetr-v6-large: RFDetr模型的large大模型版本\nlada-yolo-v4: 最新版本的Lada-YOLO模型\nrfdetr-v5: RFDetr模型v5版本\nrfdetr-vr-v1: RFDetr的VR专用模型''')
-
-        # 使用自定义按钮作为选项选择器，避免下拉箭头并提高对比度
+        detection_model_label.place(x=320, y=200)
+        Tooltip(detection_model_label, "选择使用的检测模型\n\n左侧下拉框：用于4K以下分辨率视频\n右侧下拉框：用于4K及以上分辨率视频\n\n默认值: rfdetr-v6\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v6: 最新版本的RFDetr模型\nrfdetr-v6-large: RFDetr模型的large大模型版本\nlada-yolo-v4: 最新版本的Lada-YOLO模型\nrfdetr-v5: RFDetr模型v5版本\nrfdetr-vr-v1: RFDetr的VR专用模型")
+        
         detection_model_options = ["rfdetr-v6", "rfdetr-v6-large", "lada-yolo-v4", "rfdetr-v5", "rfdetr-vr-v1"]
-        self.detection_model_current_option_index = 0  # 当前选项索引，默认rfdetr-v6
+        self.detection_model_current_option_index = 0
         
         # 确保detection_model_var被正确初始化
         if not hasattr(self, 'detection_model_var') or self.detection_model_var is None:
             self.detection_model_var = tk.StringVar()
         
-        # 创建一个带有内凹效果的自定义按钮
+        # 左侧检测模型按钮（用于4K以下分辨率视频）
         self.detection_model_button = tk.Button(
             self.settings_frame, 
             textvariable=self.detection_model_var,
             command=self.show_detection_model_menu,
             font=self.normal_font,
-            bg="white",  # 白色背景
+            bg="white",
             fg="black",
-            relief="sunken",  # 内凹效果
+            relief="sunken",
             bd=2,
             anchor="center",
             highlightthickness=0
         )
-        self.detection_model_button.place(x=680, y=160, width=160, height=30)
+        self.detection_model_button.place(x=400, y=200, width=160, height=30)
         
-        # 初始化显示，默认使用rfdetr-v6
         self.detection_model_var.set(detection_model_options[0])
         self.detection_model_options_list = detection_model_options
         
-        # 创建右键菜单
+        # 创建左侧检测模型右键菜单
         self.detection_model_menu = tk.Menu(self.root, tearoff=0)
         for option in detection_model_options:
-            # 使用嵌套函数解决lambda捕获变量的问题
             def make_command(opt):
                 return lambda: self.select_detection_model_option(opt)
             self.detection_model_menu.add_command(label=option, command=make_command(option))
         
+        # 右侧检测模型按钮（用于4K及以上分辨率视频）
+        self.detection_model_4k_current_option_index = 0
+        
+        self.detection_model_4k_button = tk.Button(
+            self.settings_frame,
+            textvariable=self.detection_model_4k_var,
+            command=self.show_detection_model_4k_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.detection_model_4k_button.place(x=570, y=200, width=160, height=30)
+        
+        self.detection_model_4k_var.set(detection_model_options[0])
+        self.detection_model_4k_options_list = detection_model_options
+        
+        # 创建右侧检测模型右键菜单
+        self.detection_model_4k_menu = tk.Menu(self.root, tearoff=0)
+        for option in detection_model_options:
+            def make_4k_command(opt):
+                return lambda: self.select_detection_model_4k_option(opt)
+            self.detection_model_4k_menu.add_command(label=option, command=make_4k_command(option))
+        
         # VR模式选择
         vr_mode_label = ttk.Label(self.settings_frame, text="VR", font=self.normal_font)
-        vr_mode_label.place(x=860, y=160, width=30, height=30)
+        vr_mode_label.place(x=760, y=200)
         Tooltip(vr_mode_label, "选择VR处理模式\n\n关闭：不添加任何VR参数\n自动：添加 --vr-mode auto 参数\nSBS：添加 --vr-mode sbs 参数\n鱼眼：添加 --vr-mode sbs-fisheye 参数\n\n默认值为\"关闭\"")
         
         vr_mode_options = ["关闭", "自动", "SBS", "鱼眼"]
-        self.vr_mode_current_option_index = 0  # 当前选项索引，默认关闭
+        self.vr_mode_current_option_index = 0
         
         self.vr_mode_button = tk.Button(
             self.settings_frame, 
@@ -860,7 +921,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.vr_mode_button.place(x=890, y=160, width=80, height=30)
+        self.vr_mode_button.place(x=810, y=200, width=90, height=30)
         
         self.vr_mode_var.set(vr_mode_options[0])
         self.vr_mode_options_list = vr_mode_options
@@ -874,12 +935,12 @@ class JasnaGUI:
         
         # 检测阈值
         detection_threshold_label = ttk.Label(self.settings_frame, text="检测阈值", font=self.normal_font)
-        detection_threshold_label.place(x=990, y=160, width=80, height=30)
+        detection_threshold_label.place(x=920, y=200)
         Tooltip(detection_threshold_label, "马赛克检测的置信度阈值\n\n取值范围：0.00-1.00\n默认值：0.20\n\n数值越小，检测越严格，可能漏检更少的马赛克\n数值越大，检测越宽松，可能减少误检\n请谨慎修改此值！")
         
         self.detection_threshold_var = tk.StringVar(value="0.20")
         self.detection_threshold_entry = ttk.Entry(self.settings_frame, textvariable=self.detection_threshold_var, width=6, font=self.normal_font, justify='center')
-        self.detection_threshold_entry.place(x=1070, y=160, width=50, height=30)
+        self.detection_threshold_entry.place(x=1000, y=200, width=60, height=30)
         # 绑定修改事件，弹窗提示用户（使用FocusOut事件，只在输入框失去焦点且值改变时触发）
         self._detection_threshold_last_value = "0.20"
         self.detection_threshold_entry.bind('<FocusOut>', self.on_detection_threshold_focus_out)
@@ -887,7 +948,7 @@ class JasnaGUI:
         
         # 二次修复模块 - 插入到自定义设置模块下方
         self.secondary_fix_frame = ttk.LabelFrame(self.root, text="二次修复", padding="10")
-        self.secondary_fix_frame.place(x=10, y=255, width=1150, height=150)
+        self.secondary_fix_frame.place(x=10, y=280, width=1150, height=150)
         self.secondary_fix_frame.configure(style="Title.TLabelframe")
         
         # 二次修复主模块组件
@@ -1591,6 +1652,8 @@ class JasnaGUI:
             "detection_model_history": getattr(self, 'detection_model_history', []),  # 添加检测模型历史记录
             # 检测模型设置
             "detection_model": self.detection_model_var.get(),  # 新增检测模型
+            "detection_model_4k": self.detection_model_4k_var.get(),  # 4K检测模型
+            "codec": self.codec_var.get(),  # 编码器选择
             "detection_threshold": self.detection_threshold_var.get(),  # 检测阈值
             # VR模式设置
             "vr_mode": self.vr_mode_var.get(),
@@ -1657,6 +1720,8 @@ class JasnaGUI:
                 
                 # 加载检测模型设置
                 self.detection_model_var.set(settings.get("detection_model", "rfdetr-v6"))  # 新增检测模型，默认rfdetr-v6
+                self.detection_model_4k_var.set(settings.get("detection_model_4k", "rfdetr-v6"))  # 4K检测模型
+                self.codec_var.set(settings.get("codec", "hevc"))  # 编码器选择
                 self.detection_threshold_var.set(settings.get("detection_threshold", "0.20"))  # 检测阈值，默认0.20
                 # 更新检测阈值的上次值，避免加载配置后触发弹窗
                 self._detection_threshold_last_value = self.detection_threshold_var.get()
@@ -2491,7 +2556,10 @@ class JasnaGUI:
                                 is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                                 
                                 # 检查当前检测模型是否已存在于历史记录中
-                                current_detection_model = self.detection_model_var.get()
+                                if is_4k_video:
+                                    current_detection_model = self.detection_model_4k_var.get()
+                                else:
+                                    current_detection_model = self.detection_model_var.get()
                                 is_detection_model_first_time = current_detection_model not in self.detection_model_history
                                 
                                 # 判断是否需要首次编译
@@ -2523,7 +2591,7 @@ class JasnaGUI:
                                 encode_params = f'"{self.encode_params_var.get()}"'
                                 
                                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
+                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                                 
                                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                                 secondary_fix_option = self.secondary_fix_var.get()
@@ -2739,7 +2807,10 @@ class JasnaGUI:
                                         
                                         # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                                         if is_first_time_for_model_compile:
-                                            current_detection_model = self.detection_model_var.get()
+                                            if is_4k_video:
+                                                current_detection_model = self.detection_model_4k_var.get()
+                                            else:
+                                                current_detection_model = self.detection_model_var.get()
                                             # 检查切片帧数是否已存在于历史记录中，避免重复添加
                                             if current_slice_frames not in self.slice_frames_history:
                                                 self.slice_frames_history.append(current_slice_frames)
@@ -2890,7 +2961,10 @@ class JasnaGUI:
                 is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                 
                 # 检查当前检测模型是否已存在于历史记录中
-                current_detection_model = self.detection_model_var.get()
+                if is_4k_video:
+                    current_detection_model = self.detection_model_4k_var.get()
+                else:
+                    current_detection_model = self.detection_model_var.get()
                 is_detection_model_first_time = current_detection_model not in self.detection_model_history
                 
                 # 判断是否需要首次编译
@@ -2922,7 +2996,7 @@ class JasnaGUI:
                 encode_params = f'"{self.encode_params_var.get()}"'
                 
                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
+                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                 
                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                 secondary_fix_option = self.secondary_fix_var.get()
@@ -3116,7 +3190,10 @@ class JasnaGUI:
                         
                         # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                         if is_first_time_for_model_compile:
-                            current_detection_model = self.detection_model_var.get()
+                            if is_4k_video:
+                                current_detection_model = self.detection_model_4k_var.get()
+                            else:
+                                current_detection_model = self.detection_model_var.get()
                             # 检查切片帧数是否已存在于历史记录中，避免重复添加
                             if current_slice_frames not in self.slice_frames_history:
                                 self.slice_frames_history.append(current_slice_frames)
@@ -3313,7 +3390,10 @@ class JasnaGUI:
                                     is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                                     
                                     # 检查当前检测模型是否已存在于历史记录中
-                                    current_detection_model = self.detection_model_var.get()
+                                    if is_4k_video:
+                                        current_detection_model = self.detection_model_4k_var.get()
+                                    else:
+                                        current_detection_model = self.detection_model_var.get()
                                     is_detection_model_first_time = current_detection_model not in self.detection_model_history
                                     
                                     # 判断是否需要首次编译
@@ -3345,7 +3425,7 @@ class JasnaGUI:
                                     encode_params = f'"{self.encode_params_var.get()}"'
                                     
                                     # 构建基础命令，使用根据分辨率选择的切片帧数
-                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
+                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                                     
                                     # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                                     secondary_fix_option = self.secondary_fix_var.get()
@@ -3557,7 +3637,10 @@ class JasnaGUI:
                                             
                                             # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                                             if is_first_time_for_model_compile:
-                                                current_detection_model = self.detection_model_var.get()
+                                                if is_4k_video:
+                                                    current_detection_model = self.detection_model_4k_var.get()
+                                                else:
+                                                    current_detection_model = self.detection_model_var.get()
                                                 # 检查切片帧数是否已存在于历史记录中，避免重复添加
                                                 if current_slice_frames not in self.slice_frames_history:
                                                     self.slice_frames_history.append(current_slice_frames)
@@ -3896,7 +3979,10 @@ class JasnaGUI:
                         is_slice_frames_first_time = current_slice_frames not in self.slice_frames_history
                         
                         # 检查当前检测模型是否已存在于历史记录中
-                        current_detection_model = self.detection_model_var.get()
+                        if is_4k_video:
+                            current_detection_model = self.detection_model_4k_var.get()
+                        else:
+                            current_detection_model = self.detection_model_var.get()
                         is_detection_model_first_time = current_detection_model not in self.detection_model_history
                         
                         # 判断是否需要首次编译
@@ -3932,7 +4018,7 @@ class JasnaGUI:
                         jasna_path = self.jasna_path_var.get()
                         jasna_dir = os.path.dirname(jasna_path)
                         jasna_exe_name = os.path.basename(jasna_path)
-                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec hevc --encoder-settings {encode_params} --log-level info --detection-model {self.detection_model_var.get()} --detection-score-threshold {self.detection_threshold_var.get()}'
+                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                         
                         # 确保JASNA目录存在
                         if not os.path.exists(jasna_dir):
@@ -4158,7 +4244,10 @@ class JasnaGUI:
                                 
                                 # 如果是首次使用且处理成功，将切片帧数和检测模型添加到历史记录
                                 if is_first_time_for_model_compile:
-                                    current_detection_model = self.detection_model_var.get()
+                                    if is_4k_video:
+                                        current_detection_model = self.detection_model_4k_var.get()
+                                    else:
+                                        current_detection_model = self.detection_model_var.get()
                                     # 检查切片帧数是否已存在于历史记录中，避免重复添加
                                     if current_slice_frames not in self.slice_frames_history:
                                         self.slice_frames_history.append(current_slice_frames)
@@ -5045,6 +5134,26 @@ class JasnaGUI:
         """选择检测模型选项"""
         self.detection_model_var.set(option)
     
+    def show_detection_model_4k_menu(self, event=None):
+        """显示4K检测模型选项菜单"""
+        x = self.detection_model_4k_button.winfo_rootx()
+        y = self.detection_model_4k_button.winfo_rooty() + self.detection_model_4k_button.winfo_height()
+        self.detection_model_4k_menu.post(x, y)
+    
+    def select_detection_model_4k_option(self, option):
+        """选择4K检测模型选项"""
+        self.detection_model_4k_var.set(option)
+    
+    def show_encoder_menu(self, event=None):
+        """显示编码器选项菜单"""
+        x = self.encoder_button.winfo_rootx()
+        y = self.encoder_button.winfo_rooty() + self.encoder_button.winfo_height()
+        self.encoder_menu.post(x, y)
+    
+    def select_encoder_option(self, option):
+        """选择编码器选项"""
+        self.codec_var.set(option)
+    
     def show_vr_mode_menu(self, event=None):
         """显示VR模式选项菜单"""
         x = self.vr_mode_button.winfo_rootx()
@@ -5131,7 +5240,7 @@ class JasnaGUI:
         """更新UI布局，根据自定义设置和二次修复模块的显示状态调整下方组件的位置和窗口大小
         
         完全重新计算所有模块的位置和窗口高度：
-        - 自定义设置模块高度: 240像素
+        - 自定义设置模块高度: 280像素
         - 二次修复模块高度: 150像素
         - 按钮控制区域高度: 60像素
         - 进度区域高度: 165像素
@@ -5141,7 +5250,7 @@ class JasnaGUI:
         - 模块间距: 5像素
         """
         # 模块高度定义
-        SETTINGS_HEIGHT = 240      # 自定义设置模块高度
+        SETTINGS_HEIGHT = 280      # 自定义设置模块高度
         SECONDARY_HEIGHT = 150     # 二次修复模块高度
         BUTTON_HEIGHT = 60         # 按钮控制区域高度
         PROGRESS_HEIGHT = 165      # 进度区域高度
