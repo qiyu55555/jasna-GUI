@@ -2538,6 +2538,10 @@ class JasnaGUI:
                 else:
                     video_file = item
                     video_info = None  # 旧格式，没有视频信息
+                
+                # 每个视频开始处理前清空日志文件
+                self.clear_log_file()
+                
                 if self.stop_processing:
                     self.logger.info("处理已停止，退出视频处理循环")
                     break
@@ -2570,7 +2574,7 @@ class JasnaGUI:
                 
                 # 检查视频帧率是否是标准帧率
                 fps_str = self.video_fps_var.get()
-                standard_fps = [23.976, 24, 25, 29.97, 30, 59.94, 60, 120]
+                standard_fps = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120]
                 is_standard_fps = False
                 
                 if fps_str != "未知":
@@ -2853,9 +2857,6 @@ class JasnaGUI:
                                     # 重置进度条
                                     self.root.after(0, self.reset_progress_display)
                                     
-                                    # 清空日志文件
-                                    self.clear_log_file()
-                                    
                                     # 重置停止标志，以便继续处理下一个视频
                                     self.stop_processing = False
                                     continue
@@ -3081,9 +3082,6 @@ class JasnaGUI:
                     # 重置进度条
                     self.root.after(0, self.reset_progress_display)
                     
-                    # 清空日志文件
-                    self.clear_log_file()
-                    
                     # 重置停止标志，以便继续处理下一个视频
                     self.stop_processing = False
                     continue
@@ -3256,9 +3254,6 @@ class JasnaGUI:
                     
                     # 重置进度条
                     self.root.after(0, self.reset_progress_display)
-                    
-                    # 清空日志文件
-                    self.clear_log_file()
                     
                     # 不使用continue，因为handle_stuck_video方法已经包含了转码和再次处理的逻辑
                     # 直接继续执行后续代码
@@ -3682,9 +3677,6 @@ class JasnaGUI:
                                         # 重置进度条
                                         self.root.after(0, self.reset_progress_display)
                                         
-                                        # 清空日志文件
-                                        self.clear_log_file()
-                                        
                                         # 重要修复：跳过当前卡死视频，继续处理下一个视频
                                         # 不需要执行后续的成功/失败检查，直接continue到下一个循环
                                         # 重置停止标志，以便继续处理下一个视频
@@ -3902,9 +3894,6 @@ class JasnaGUI:
                 self.currently_processing = None
                 self.current_video_var.set("无")
                 
-                # 清空日志文件
-                self.clear_log_file()
-                
                 # 重置进度条
                 self.root.after(0, self.reset_progress_display)
             
@@ -3927,9 +3916,6 @@ class JasnaGUI:
                 # 处理完成后强制终止所有jasna进程
                 self.logger.info(f"处理完成，强制终止所有{self.get_jasna_exe_name()}进程")
                 self.kill_all_jasna_processes()
-            
-            # 在所有处理完成后清空日志文件
-            self.clear_log_file()
             
             # 隐藏处理状态指示器
             self.root.after(0, self.hide_processing_mode_indicator)
@@ -3954,9 +3940,6 @@ class JasnaGUI:
             except Exception as e:
                 self.logger.error(f"异常情况下终止{self.get_jasna_exe_name()}进程时出错: {str(e)}")
             
-            # 在异常处理的finally块中也要清空日志文件
-            self.clear_log_file()
-    
     def check_final_file_exists(self, video_name, suffix, output_folder):
         """检查最终文件是否存在"""
         try:
@@ -4285,9 +4268,6 @@ class JasnaGUI:
                             # 重置进度条
                             self.root.after(0, self.reset_progress_display)
                             
-                            # 清空日志文件
-                            self.clear_log_file()
-                            
                             return
                         
                         # 检查进程是否成功完成
@@ -4584,9 +4564,6 @@ class JasnaGUI:
                             self.kill_all_jasna_processes()
             except Exception as e:
                 self.logger.error(f"终止JASNA进程时出错（卡死检测）: {str(e)}")
-            
-            # 清空日志文件（新添加的，在执行新的处理命令前清空日志）
-            self.clear_log_file()
     
     def start_stuck_monitor(self, custom_stuck_seconds=None):
         """启动卡死监测线程"""
@@ -5650,9 +5627,6 @@ class JasnaGUI:
             self.original_stuck_seconds = None
         
 
-        
-        # 在完成所有停止操作后清空日志文件
-        self.clear_log_file()
         
         # 隐藏处理状态指示器
         self.root.after(0, self.hide_processing_mode_indicator)
