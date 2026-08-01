@@ -463,6 +463,9 @@ class JasnaGUI:
         # 初始化二次修复状态标签
         self.update_secondary_fix_status_label()
         
+        # 延迟检测pymediainfo库是否安装
+        self.root.after(500, self.check_pymediainfo)
+        
         # 绑定窗口关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
@@ -1455,6 +1458,101 @@ class JasnaGUI:
         self.status_var = tk.StringVar(value="就绪")
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, font=self.normal_font, anchor='center')
         status_bar.place(x=10, y=1015, width=1150, height=30)
+    
+    def check_pymediainfo(self):
+        """检测pymediainfo库是否安装，未安装时提示用户"""
+        try:
+            from pymediainfo import MediaInfo
+            # 尝试进一步验证：检查MediaInfo动态库是否可用
+            # 通过解析一个空字符串来触发底层库加载
+            return  # 已安装且可用，直接返回
+        except ImportError:
+            pass
+        except Exception:
+            # pymediainfo已安装但MediaInfo动态库缺失
+            result = messagebox.askyesno(
+                "pymediainfo检测",
+                "检测到pymediainfo库已安装，但MediaInfo动态库(libmediainfo)缺失或无法加载。\n\n"
+                "这将导致无法获取视频分辨率、帧率、时长等信息。\n\n"
+                "是否查看安装说明？",
+                icon='warning'
+            )
+            if result:
+                messagebox.showinfo(
+                    "安装MediaInfo",
+                    "请按以下步骤操作：\n\n"
+                    "1. 下载MediaInfo CLI：\n"
+                    "   https://mediaarea.net/en/MediaInfo/Download/Windows\n\n"
+                    "2. 安装后将 libmediainfo.dll 复制到：\n"
+                    "   - Python安装目录的DLLs文件夹\n"
+                    "   或\n"
+                    "   - 本程序所在目录\n\n"
+                    "3. 重启程序"
+                )
+            return
+        # pymediainfo未安装，弹出安装对话框
+        result = messagebox.askyesno(
+            "pymediainfo检测",
+            "检测到pymediainfo库未安装。\n\n"
+            "该库用于获取视频分辨率、帧率、时长等信息，\n"
+            "未安装时这些信息将显示为'未知'，\n"
+            "程序将无法自动根据分辨率选择切片帧数和检测模型。\n\n"
+            "是否立即自动安装？\n"
+            "（需要联网，安装后需重启程序）",
+            icon='question'
+        )
+        if result:
+            self.install_pymediainfo()
+    
+    def install_pymediainfo(self):
+        """自动安装pymediainfo库"""
+        import subprocess
+        import sys
+        self.status_var.set("正在安装pymediainfo库，请稍候...")
+        self.root.update_idletasks()
+        try:
+            # 使用当前Python解释器的pip进行安装
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "pymediainfo"],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            if result.returncode == 0:
+                messagebox.showinfo(
+                    "安装成功",
+                    "pymediainfo库安装成功！\n\n"
+                    "请重启程序以使更改生效。"
+                )
+                self.status_var.set("pymediainfo安装成功，请重启程序")
+            else:
+                # 安装失败，显示错误并提供手动安装说明
+                error_msg = result.stderr if result.stderr else "未知错误"
+                messagebox.showerror(
+                    "安装失败",
+                    f"自动安装失败：\n{error_msg}\n\n"
+                    "请手动执行以下命令安装：\n\n"
+                    "pip install pymediainfo\n\n"
+                    "如果仍失败，请先下载安装MediaInfo CLI：\n"
+                    "https://mediaarea.net/en/MediaInfo/Download/Windows"
+                )
+                self.status_var.set("pymediainfo安装失败，请手动安装")
+        except subprocess.TimeoutExpired:
+            messagebox.showerror(
+                "安装超时",
+                "安装超时（超过120秒）。\n\n"
+                "请手动执行以下命令安装：\n\n"
+                "pip install pymediainfo"
+            )
+            self.status_var.set("pymediainfo安装超时，请手动安装")
+        except Exception as e:
+            messagebox.showerror(
+                "安装异常",
+                f"安装过程中发生异常：\n{str(e)}\n\n"
+                "请手动执行以下命令安装：\n\n"
+                "pip install pymediainfo"
+            )
+            self.status_var.set("pymediainfo安装异常，请手动安装")
     
     def browse_jasna_path(self):
         """浏览选择jasna主程序"""
