@@ -694,7 +694,7 @@ class JasnaGUI:
         
         # 第一行设置 - 使用place布局
         # 1. jasna程序地址
-        jasna_label = ttk.Label(self.settings_frame, text="jasna-cli的地址", font=self.normal_font)
+        jasna_label = ttk.Label(self.settings_frame, text="JASNA程序地址", font=self.normal_font)
         jasna_label.place(x=10, y=0)
         Tooltip(jasna_label, "A卡不能用\n\n指定jasna-cli主程序文件的完整路径\n\n例如: D:/jasna-0.5/jasna-cli.exe\n\n本GUI程序可以不与jasna-cli.exe程序放在一起\n放在任何位置都可以正常运行\n只要jasna-cli.exe的命令没有改变\n则此程序可以适用于jasna的不同版本")
         
@@ -1461,15 +1461,27 @@ class JasnaGUI:
     
     def check_pymediainfo(self):
         """检测pymediainfo库是否安装，未安装时提示用户"""
+        import sys
+        # 判断是否为打包后的exe环境
+        is_frozen = getattr(sys, 'frozen', False)
         try:
             from pymediainfo import MediaInfo
-            # 尝试进一步验证：检查MediaInfo动态库是否可用
-            # 通过解析一个空字符串来触发底层库加载
+            # 进一步验证MediaInfo动态库是否可加载
+            if not MediaInfo.can_parse():
+                raise RuntimeError("MediaInfo动态库无法加载")
             return  # 已安装且可用，直接返回
         except ImportError:
+            # 打包后的exe不应出现此情况（pymediainfo已内置），仅开发环境提示安装
+            if is_frozen:
+                self.logger.error("打包环境中pymediainfo库缺失，这可能是个打包问题")
+                return
             pass
         except Exception:
             # pymediainfo已安装但MediaInfo动态库缺失
+            if is_frozen:
+                # 打包环境中dll加载失败，记录日志但不弹窗（避免困扰用户）
+                self.logger.error("打包环境中MediaInfo动态库加载失败")
+                return
             result = messagebox.askyesno(
                 "pymediainfo检测",
                 "检测到pymediainfo库已安装，但MediaInfo动态库(libmediainfo)缺失或无法加载。\n\n"
@@ -1490,7 +1502,7 @@ class JasnaGUI:
                     "3. 重启程序"
                 )
             return
-        # pymediainfo未安装，弹出安装对话框
+        # pymediainfo未安装，弹出安装对话框（仅开发环境）
         result = messagebox.askyesno(
             "pymediainfo检测",
             "检测到pymediainfo库未安装。\n\n"

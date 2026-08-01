@@ -1,12 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+import pymediainfo
+
+# 获取pymediainfo包目录，用于打包MediaInfo.dll
+_pymediainfo_dir = os.path.dirname(pymediainfo.__file__)
+_mediainfo_dll = os.path.join(_pymediainfo_dir, 'MediaInfo.dll')
+
+# pymediainfo库在加载时会从 os.path.dirname(__file__) 即pymediainfo包目录中查找MediaInfo.dll
+# 因此需要将MediaInfo.dll放到pymediainfo子目录中，而不是根目录
+_pymediainfo_binaries = []
+if os.path.exists(_mediainfo_dll):
+    _pymediainfo_binaries.append((_mediainfo_dll, 'pymediainfo'))
+
 
 a = Analysis(
     ['jasna-GUI.py'],
     pathex=[],
-    binaries=[],
+    binaries=_pymediainfo_binaries,
     datas=[('jasna-v2-T-256.ico', '.')],  # 包含图标文件
-    hiddenimports=[],
+    hiddenimports=['pymediainfo'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
