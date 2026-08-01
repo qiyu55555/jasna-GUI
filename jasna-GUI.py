@@ -435,6 +435,8 @@ class JasnaGUI:
         self.detection_model_4k_var = tk.StringVar()
         # 编码器选择
         self.codec_var = tk.StringVar(value="hevc")
+        # 马赛克破解模型选择
+        self.restoration_model_var = tk.StringVar(value="basicvsrpp")
         
         # 配置文件路径
         self.config_file = "jasna_gui_config.json"
@@ -807,10 +809,42 @@ class JasnaGUI:
         self.transcode_params_entry = ttk.Entry(self.settings_frame, textvariable=self.transcode_params_var, width=53, font=self.normal_font)
         self.transcode_params_entry.place(x=140, y=160, width=980)
         
-        # 第五行设置 - 编码器、检测模型、VR、检测阈值
+        # 第五行设置 - 马赛克破解模型、编码器、检测模型、VR、检测阈值
+        # 马赛克破解模型选择
+        restoration_model_label = ttk.Label(self.settings_frame, text="马赛克破解模型", font=self.normal_font)
+        restoration_model_label.place(x=10, y=200)
+        Tooltip(restoration_model_label, "选择马赛克破解模型\n\nbasicvsrpp: BasicVSR++模型\n\n默认值: basicvsrpp")
+        
+        restoration_model_options = ["basicvsrpp"]
+        self.restoration_model_current_option_index = 0
+        
+        self.restoration_model_button = tk.Button(
+            self.settings_frame,
+            textvariable=self.restoration_model_var,
+            command=self.show_restoration_model_menu,
+            font=self.normal_font,
+            bg="white",
+            fg="black",
+            relief="sunken",
+            bd=2,
+            anchor="center",
+            highlightthickness=0
+        )
+        self.restoration_model_button.place(x=140, y=200, width=150, height=30)
+        
+        self.restoration_model_var.set(restoration_model_options[0])
+        self.restoration_model_options_list = restoration_model_options
+        
+        # 创建破解模型右键菜单
+        self.restoration_model_menu = tk.Menu(self.root, tearoff=0)
+        for option in restoration_model_options:
+            def make_restoration_command(opt):
+                return lambda: self.select_restoration_model_option(opt)
+            self.restoration_model_menu.add_command(label=option, command=make_restoration_command(option))
+        
         # 编码器选择
         encoder_label = ttk.Label(self.settings_frame, text="编码器", font=self.normal_font)
-        encoder_label.place(x=140, y=200)
+        encoder_label.place(x=305, y=200)
         Tooltip(encoder_label, "选择视频编码器\n\nhevc: 使用H.265/HEVC编码器\nav1: 使用AV1编码器\nh264: 使用H.264/AVC编码器\n\n默认值: hevc")
         
         encoder_options = ["hevc", "av1", "h264"]
@@ -828,7 +862,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.encoder_button.place(x=210, y=200, width=90, height=30)
+        self.encoder_button.place(x=368, y=200, width=90, height=30)
         
         self.codec_var.set(encoder_options[0])
         self.encoder_options_list = encoder_options
@@ -842,7 +876,7 @@ class JasnaGUI:
         
         # 检测模型选择
         detection_model_label = ttk.Label(self.settings_frame, text="检测模型", font=self.normal_font)
-        detection_model_label.place(x=320, y=200)
+        detection_model_label.place(x=473, y=200)
         Tooltip(detection_model_label, "选择使用的检测模型\n\n左侧下拉框：用于4K以下分辨率视频\n右侧下拉框：用于4K及以上分辨率视频\n\n默认值: rfdetr-v6\n\n最好先使用CMD命令行把要用的检测模型先编译完成\n\nrfdetr-v6: 最新版本的RFDetr模型\nrfdetr-v6-large: RFDetr模型的large大模型版本\nlada-yolo-v4: 最新版本的Lada-YOLO模型\nrfdetr-v5: RFDetr模型v5版本\nrfdetr-vr-v1: RFDetr的VR专用模型")
         
         detection_model_options = ["rfdetr-v6", "rfdetr-v6-large", "lada-yolo-v4", "rfdetr-v5", "rfdetr-vr-v1"]
@@ -865,7 +899,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.detection_model_button.place(x=400, y=200, width=160, height=30)
+        self.detection_model_button.place(x=554, y=200, width=150, height=30)
         
         self.detection_model_var.set(detection_model_options[0])
         self.detection_model_options_list = detection_model_options
@@ -892,7 +926,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.detection_model_4k_button.place(x=570, y=200, width=160, height=30)
+        self.detection_model_4k_button.place(x=712, y=200, width=150, height=30)
         
         self.detection_model_4k_var.set(detection_model_options[0])
         self.detection_model_4k_options_list = detection_model_options
@@ -906,8 +940,8 @@ class JasnaGUI:
         
         # VR模式选择
         vr_mode_label = ttk.Label(self.settings_frame, text="VR", font=self.normal_font)
-        vr_mode_label.place(x=760, y=200)
-        Tooltip(vr_mode_label, "选择VR处理模式\n\n关闭：不添加任何VR参数\n自动：添加 --vr-mode auto 参数\nSBS：添加 --vr-mode sbs 参数\n鱼眼：添加 --vr-mode sbs-fisheye 参数\n\n默认值为\"关闭\"")
+        vr_mode_label.place(x=875, y=200)
+        Tooltip(vr_mode_label, "选择VR处理模式\n\n关闭：不添加任何VR参数\n自动：添加 --vr-mode auto 参数\nSBS：添加 --vr-mode sbs 参数\n鱼眼：添加 --vr-mode sbs-fisheye 参数\n\n默认值为'关闭'")
         
         vr_mode_options = ["关闭", "自动", "SBS", "鱼眼"]
         self.vr_mode_current_option_index = 0
@@ -924,7 +958,7 @@ class JasnaGUI:
             anchor="center",
             highlightthickness=0
         )
-        self.vr_mode_button.place(x=810, y=200, width=90, height=30)
+        self.vr_mode_button.place(x=905, y=200, width=60, height=30)
         
         self.vr_mode_var.set(vr_mode_options[0])
         self.vr_mode_options_list = vr_mode_options
@@ -938,12 +972,12 @@ class JasnaGUI:
         
         # 检测阈值
         detection_threshold_label = ttk.Label(self.settings_frame, text="检测阈值", font=self.normal_font)
-        detection_threshold_label.place(x=920, y=200)
+        detection_threshold_label.place(x=982, y=200)
         Tooltip(detection_threshold_label, "马赛克检测的置信度阈值\n\n取值范围：0.00-1.00\n默认值：0.20\n\n数值越小，检测越严格，可能漏检更少的马赛克\n数值越大，检测越宽松，可能减少误检\n请谨慎修改此值！")
         
         self.detection_threshold_var = tk.StringVar(value="0.20")
         self.detection_threshold_entry = ttk.Entry(self.settings_frame, textvariable=self.detection_threshold_var, width=6, font=self.normal_font, justify='center')
-        self.detection_threshold_entry.place(x=1000, y=200, width=60, height=30)
+        self.detection_threshold_entry.place(x=1060, y=200, width=60, height=30)
         # 绑定修改事件，弹窗提示用户（使用FocusOut事件，只在输入框失去焦点且值改变时触发）
         self._detection_threshold_last_value = "0.20"
         self.detection_threshold_entry.bind('<FocusOut>', self.on_detection_threshold_focus_out)
@@ -1764,6 +1798,7 @@ class JasnaGUI:
             "detection_model": self.detection_model_var.get(),  # 新增检测模型
             "detection_model_4k": self.detection_model_4k_var.get(),  # 4K检测模型
             "codec": self.codec_var.get(),  # 编码器选择
+            "restoration_model": self.restoration_model_var.get(),  # 破解模型选择
             "detection_threshold": self.detection_threshold_var.get(),  # 检测阈值
             # VR模式设置
             "vr_mode": self.vr_mode_var.get(),
@@ -1832,6 +1867,7 @@ class JasnaGUI:
                 self.detection_model_var.set(settings.get("detection_model", "rfdetr-v6"))  # 新增检测模型，默认rfdetr-v6
                 self.detection_model_4k_var.set(settings.get("detection_model_4k", "rfdetr-v6"))  # 4K检测模型
                 self.codec_var.set(settings.get("codec", "hevc"))  # 编码器选择
+                self.restoration_model_var.set(settings.get("restoration_model", "basicvsrpp"))  # 破解模型选择
                 self.detection_threshold_var.set(settings.get("detection_threshold", "0.20"))  # 检测阈值，默认0.20
                 # 更新检测阈值的上次值，避免加载配置后触发弹窗
                 self._detection_threshold_last_value = self.detection_threshold_var.get()
@@ -2701,7 +2737,7 @@ class JasnaGUI:
                                 encode_params = f'"{self.encode_params_var.get()}"'
                                 
                                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
+                                cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --restoration-model-name {self.restoration_model_var.get()} --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                                 
                                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                                 secondary_fix_option = self.secondary_fix_var.get()
@@ -3106,7 +3142,7 @@ class JasnaGUI:
                 encode_params = f'"{self.encode_params_var.get()}"'
                 
                 # 构建基础命令，使用根据分辨率选择的切片帧数
-                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
+                cmd = f'.\\{jasna_exe_name} --input "{input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --restoration-model-name {self.restoration_model_var.get()} --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                 
                 # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                 secondary_fix_option = self.secondary_fix_var.get()
@@ -3535,7 +3571,7 @@ class JasnaGUI:
                                     encode_params = f'"{self.encode_params_var.get()}"'
                                     
                                     # 构建基础命令，使用根据分辨率选择的切片帧数
-                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
+                                    cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --restoration-model-name {self.restoration_model_var.get()} --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                                     
                                     # 根据二次修复模块中"使用软件"组件的选择，添加相应参数
                                     secondary_fix_option = self.secondary_fix_var.get()
@@ -4128,7 +4164,7 @@ class JasnaGUI:
                         jasna_path = self.jasna_path_var.get()
                         jasna_dir = os.path.dirname(jasna_path)
                         jasna_exe_name = os.path.basename(jasna_path)
-                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
+                        cmd = f'.\\{jasna_exe_name} --input "{transcoded_input_path}" --output "{final_output_path}" --max-clip-size {current_slice_frames} --codec {self.codec_var.get()} --encoder-settings {encode_params} --log-level info --restoration-model-name {self.restoration_model_var.get()} --detection-model {current_detection_model} --detection-score-threshold {self.detection_threshold_var.get()}'
                         
                         # 确保JASNA目录存在
                         if not os.path.exists(jasna_dir):
@@ -5253,6 +5289,16 @@ class JasnaGUI:
     def select_detection_model_4k_option(self, option):
         """选择4K检测模型选项"""
         self.detection_model_4k_var.set(option)
+    
+    def show_restoration_model_menu(self, event=None):
+        """显示破解模型选项菜单"""
+        x = self.restoration_model_button.winfo_rootx()
+        y = self.restoration_model_button.winfo_rooty() + self.restoration_model_button.winfo_height()
+        self.restoration_model_menu.post(x, y)
+    
+    def select_restoration_model_option(self, option):
+        """选择破解模型选项"""
+        self.restoration_model_var.set(option)
     
     def show_encoder_menu(self, event=None):
         """显示编码器选项菜单"""
